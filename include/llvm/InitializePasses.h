@@ -345,6 +345,9 @@ void initializeWholeProgramDevirtPass(PassRegistry &);
 void initializeWinEHPreparePass(PassRegistry&);
 void initializeWriteBitcodePassPass(PassRegistry &);
 void initializeXRayInstrumentationPass(PassRegistry &);
+
+void initializeAnnotationsInference(PassRegistry&);
+void initializeAnnotationsInferencePass(PassRegistry&);
 }
 
 #endif
