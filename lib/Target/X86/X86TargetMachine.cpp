@@ -29,6 +29,8 @@ static cl::opt<bool> EnableMachineCombinerPass("x86-machine-combiner",
                                cl::desc("Enable the machine combiner pass"),
                                cl::init(true), cl::Hidden);
 
+static cl::opt<bool> EnableMachineInstPrint("machine-inst-print", cl::desc("Print machine instructions"), cl::init(false), cl::Hidden);
+
 namespace llvm {
 void initializeWinEHStatePassPass(PassRegistry &);
 }
@@ -311,6 +313,8 @@ void X86PassConfig::addPreRegAlloc() {
   }
 
   addPass(createX86WinAllocaExpander());
+  //if(EnableMachineInstPrint)
+  addPass(createMachineInstPrint());
 }
 
 void X86PassConfig::addPostRegAlloc() {

@@ -670,7 +670,7 @@ MachineInstr::MachineInstr(MachineFunction &MF, const MCInstrDesc &tid,
                            DebugLoc dl, bool NoImp)
     : MCID(&tid), Parent(nullptr), Operands(nullptr), NumOperands(0), Flags(0),
       AsmPrinterFlags(0), NumMemRefs(0), MemRefs(nullptr),
-      debugLoc(std::move(dl))
+      debugLoc(std::move(dl)), sgx_type(0), register_sgx_type(0)
 #ifdef LLVM_BUILD_GLOBAL_ISEL
       ,
       Tys(0)
@@ -2001,6 +2001,19 @@ void MachineInstr::print(raw_ostream &OS, ModuleSlotTracker &MST,
     debugLoc.print(OS);
   }
 
+  if (!HaveSemi)
+	  OS << ";";
+  if (sgx_type == 1)
+	  OS << " sgx_private";
+  else if (sgx_type == 2)
+	  OS << " sgx_public";
+  else
+	  OS << " sgx_undef";
+
+  if (register_sgx_type == 1)
+	  OS << ", register_sgx_private";
+  else if (register_sgx_type == 2)
+	  OS << ", register_sgx_public";
   OS << '\n';
 }
 

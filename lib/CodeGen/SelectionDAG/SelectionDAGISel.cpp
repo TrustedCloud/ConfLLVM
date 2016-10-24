@@ -920,7 +920,6 @@ void SelectionDAGISel::DoInstructionSelection() {
         << " '" << FuncInfo->MBB->getName() << "'\n");
 
   PreprocessISelDAG();
-
   // Select target instructions for the DAG.
   {
     // Number all nodes with a topological order and set DAGSize.
@@ -941,6 +940,7 @@ void SelectionDAGISel::DoInstructionSelection() {
     // nodes by starting at the end of the list (the root of the
     // graph) and preceding back toward the beginning (the entry
     // node).
+	
     while (ISelPosition != CurDAG->allnodes_begin()) {
       SDNode *Node = &*--ISelPosition;
       // Skip dead nodes. DAGCombiner is expected to eliminate all dead nodes,
@@ -951,7 +951,7 @@ void SelectionDAGISel::DoInstructionSelection() {
 
       Select(Node);
     }
-
+	
     CurDAG->setRoot(Dummy.getValue());
   }
 
@@ -2797,6 +2797,7 @@ void SelectionDAGISel::SelectCodeCommon(SDNode *NodeToMatch,
   // pattern.
   SmallVector<MachineMemOperand*, 2> MatchedMemRefs;
 
+
   // These are the current input chain and glue for use when generating nodes.
   // Various Emit operations change these.  For example, emitting a copytoreg
   // uses and updates these.
@@ -2937,6 +2938,7 @@ void SelectionDAGISel::SelectCodeCommon(SDNode *NodeToMatch,
       continue;
     }
     case OPC_RecordMemRef:
+		cast<MemSDNode>(N)->getMemOperand()->sgx_type = N->sgx_type;
       MatchedMemRefs.push_back(cast<MemSDNode>(N)->getMemOperand());
       continue;
 
@@ -3374,7 +3376,7 @@ void SelectionDAGISel::SelectCodeCommon(SDNode *NodeToMatch,
         // add the results to the RecordedNodes list.
         Res = CurDAG->getMachineNode(TargetOpc, SDLoc(NodeToMatch),
                                      VTList, Ops);
-
+		
         // Add all the non-glue/non-chain results to the RecordedNodes list.
         for (unsigned i = 0, e = VTs.size(); i != e; ++i) {
           if (VTs[i] == MVT::Other || VTs[i] == MVT::Glue) break;
@@ -3394,6 +3396,18 @@ void SelectionDAGISel::SelectCodeCommon(SDNode *NodeToMatch,
         });
         Res = MorphNode(NodeToMatch, TargetOpc, VTList, Ops, EmitNodeInfo);
       }
+	  int sgx_type = NodeToMatch->sgx_type;
+	  for (auto a : MatchedMemRefs) {
+		  if (a->sgx_type == 0)
+			  continue;
+		  if (sgx_type == 0)
+			  sgx_type = a->sgx_type;
+		  else if (sgx_type != a->sgx_type) {
+			  llvm_unreachable("Merge with 2 types!");
+		  }
+			  
+	  }
+	  Res->sgx_type = sgx_type;
 
       // If the node had chain/glue results, update our notion of the current
       // chain and glue.
@@ -3490,8 +3504,9 @@ void SelectionDAGISel::SelectCodeCommon(SDNode *NodeToMatch,
                     Res.getValueType().getSizeInBits()) &&
                "invalid replacement");
         CurDAG->ReplaceAllUsesOfValueWith(SDValue(NodeToMatch, i), Res);
+		
       }
-
+	 
       // Update chain uses.
       UpdateChains(NodeToMatch, InputChain, ChainNodesMatched, false);
 

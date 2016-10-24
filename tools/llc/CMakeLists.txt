@@ -12,6 +12,7 @@ set(LLVM_LINK_COMPONENTS
   Support
   Target
   TransformUtils
+  AnnotationsInference
   )
 
 # Support plugins.

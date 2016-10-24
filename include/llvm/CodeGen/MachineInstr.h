@@ -135,6 +135,9 @@ private:
   friend class MachineFunction;
 
 public:
+
+  int sgx_type;
+  int register_sgx_type;
   const MachineBasicBlock* getParent() const { return Parent; }
   MachineBasicBlock* getParent() { return Parent; }
 

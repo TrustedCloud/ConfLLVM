@@ -121,6 +121,7 @@ private:
   const MDNode *Ranges;
 
 public:
+	int sgx_type;
   /// Construct a MachineMemOperand object with the specified PtrInfo, flags,
   /// size, and base alignment.
   MachineMemOperand(MachinePointerInfo PtrInfo, Flags flags, uint64_t s,

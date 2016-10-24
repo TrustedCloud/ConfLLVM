@@ -449,6 +449,8 @@ public:
   /// Unique and persistent id per SDNode in the DAG.
   /// Used for debug printing.
   uint16_t PersistentId;
+  int sgx_type;
+  int register_sgx_type;
 
   //===--------------------------------------------------------------------===//
   //  Accessors
@@ -818,7 +820,7 @@ protected:
       : NodeType(Opc), HasDebugValue(false), SubclassData(0), NodeId(-1),
         OperandList(nullptr), ValueList(VTs.VTs), UseList(nullptr),
         NumOperands(0), NumValues(VTs.NumVTs), IROrder(Order),
-        debugLoc(std::move(dl)) {
+        debugLoc(std::move(dl)), sgx_type(0), register_sgx_type(0) {
     assert(debugLoc.hasTrivialDestructor() && "Expected trivial destructor");
     assert(NumValues == VTs.NumVTs &&
            "NumValues wasn't wide enough for its operands!");

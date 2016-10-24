@@ -2454,13 +2454,13 @@ public:
   /// should fill in the InVals array with legal-type argument values, and
   /// return the resulting token chain value.
   ///
-  virtual SDValue LowerFormalArguments(
-      SDValue /*Chain*/, CallingConv::ID /*CallConv*/, bool /*isVarArg*/,
-      const SmallVectorImpl<ISD::InputArg> & /*Ins*/, const SDLoc & /*dl*/,
-      SelectionDAG & /*DAG*/, SmallVectorImpl<SDValue> & /*InVals*/) const {
-    llvm_unreachable("Not Implemented");
-  }
 
+  virtual SDValue LowerFormalArguments(
+	  SDValue /*Chain*/, CallingConv::ID /*CallConv*/, bool /*isVarArg*/,
+	  const SmallVectorImpl<ISD::InputArg> & /*Ins*/, const SDLoc & /*dl*/,
+	  SelectionDAG & /*DAG*/, SmallVectorImpl<SDValue> & /*InVals*/) const {
+	  llvm_unreachable("Not Implemented");
+  }
   struct ArgListEntry {
     SDValue Node;
     Type* Ty;
@@ -2475,11 +2475,12 @@ public:
     bool isSwiftSelf : 1;
     bool isSwiftError : 1;
     uint16_t Alignment;
+	bool sgx_type;
 
     ArgListEntry() : isSExt(false), isZExt(false), isInReg(false),
       isSRet(false), isNest(false), isByVal(false), isInAlloca(false),
       isReturned(false), isSwiftSelf(false), isSwiftError(false),
-      Alignment(0) { }
+      Alignment(0),sgx_type(false) { }
 
     void setAttributes(ImmutableCallSite *CS, unsigned AttrIdx);
   };

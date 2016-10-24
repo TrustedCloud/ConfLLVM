@@ -903,6 +903,10 @@ void AsmPrinter::EmitFunctionBody() {
         EmitInstruction(&MI);
         break;
       }
+	 
+
+
+
 
       if (ShouldPrintDebugScopes) {
         for (const HandlerInfo &HI : Handlers) {

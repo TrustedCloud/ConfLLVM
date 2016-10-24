@@ -116,6 +116,9 @@ OptsizeJumpTableDensity("optsize-jump-table-density", cl::init(40), cl::Hidden,
 // store [4096 x i8] %data, [4096 x i8]* %buffer
 static const unsigned MaxParallelChains = 64;
 
+
+bool getSgxType(const Value *);
+
 static SDValue getCopyFromPartsVector(SelectionDAG &DAG, const SDLoc &DL,
                                       const SDValue *Parts, unsigned NumParts,
                                       MVT PartVT, EVT ValueVT, const Value *V);
@@ -1220,9 +1223,13 @@ SDValue SelectionDAGBuilder::getValueImpl(const Value *V) {
   if (const AllocaInst *AI = dyn_cast<AllocaInst>(V)) {
     DenseMap<const AllocaInst*, int>::iterator SI =
       FuncInfo.StaticAllocaMap.find(AI);
-    if (SI != FuncInfo.StaticAllocaMap.end())
-      return DAG.getFrameIndex(SI->second,
-                               TLI.getPointerTy(DAG.getDataLayout()));
+	bool sgx_type = getSgxType(AI);
+	if (SI != FuncInfo.StaticAllocaMap.end()) {
+		SDValue FIN = DAG.getFrameIndex(SI->second,
+			TLI.getPointerTy(DAG.getDataLayout()));
+		FIN.getNode()->sgx_type = sgx_type ? 1 : 2;
+		return FIN;
+	}
   }
 
   // If this is an instruction which fast-isel has deferred, select it now.
@@ -3379,6 +3386,50 @@ void SelectionDAGBuilder::visitGetElementPtr(const User &I) {
   setValue(&I, N);
 }
 
+
+bool getSgxType(const Value *PtrV) {
+	bool sgx_type;
+	if (const Instruction *PI = dyn_cast<Instruction>(PtrV)) {
+		MDNode *ptr_md_node = PI->getMetadata("sgx_type");
+		if (!ptr_md_node) {
+			errs() << "No MD found!\n";
+			sgx_type = false;
+		}
+		else {
+			MDString *ptr_type_string = dyn_cast<MDString>(ptr_md_node->getOperand(1).get());
+			sgx_type = ptr_type_string->getString().compare("private") == 0;
+		}
+	}
+	else if (const Argument *AI = dyn_cast<Argument>(PtrV)) {
+		MDNode *func_md = AI->getParent()->getMetadata("sgx_type");
+		if (!func_md) {
+			errs() << "No MDD found!\n";
+			sgx_type = false;
+		}
+		else {
+			MDNode *arg_md = dyn_cast<MDNode> (func_md->getOperand(AI->getArgNo()).get());
+			MDString *ptr_type_string = dyn_cast<MDString>(arg_md->getOperand(1).get());
+			sgx_type = ptr_type_string->getString().compare("private") == 0;
+		}
+	}
+	else if (const AllocaInst *AI = dyn_cast<AllocaInst>(PtrV)) {
+		MDNode *ptr_md_node = AI->getMetadata("sgx_type");
+		if (!ptr_md_node) {
+			errs() << "No MD found!\n";
+			sgx_type = false;
+		}
+		else {
+			MDString *ptr_type_string = dyn_cast<MDString>(ptr_md_node->getOperand(1).get());
+			sgx_type = ptr_type_string->getString().compare("private") == 0;
+		}
+	}
+	else {
+		sgx_type = false;
+	}
+	return sgx_type;
+}
+
+
 void SelectionDAGBuilder::visitAlloca(const AllocaInst &I) {
   // If this is a fixed sized alloca in the entry block of the function,
   // allocate it statically on the stack.
@@ -3459,6 +3510,7 @@ void SelectionDAGBuilder::visitLoad(const LoadInst &I) {
 
   Type *Ty = I.getType();
 
+  bool sgx_type = getSgxType(SV);
   bool isVolatile = I.isVolatile();
   bool isNonTemporal = I.getMetadata(LLVMContext::MD_nontemporal) != nullptr;
 
@@ -3539,6 +3591,8 @@ void SelectionDAGBuilder::visitLoad(const LoadInst &I) {
       MMOFlags |= MachineMemOperand::MONonTemporal;
     if (isInvariant)
       MMOFlags |= MachineMemOperand::MOInvariant;
+	if (sgx_type)
+		MMOFlags |= MachineMemOperand::MOTargetFlag1;
 
     SDValue L = DAG.getLoad(ValueVTs[i], dl, Root, A,
                             MachinePointerInfo(SV, Offsets[i]), Alignment,
@@ -3619,6 +3673,7 @@ void SelectionDAGBuilder::visitLoadFromSwiftError(const LoadInst &I) {
   setValue(&I, L);
 }
 
+
 void SelectionDAGBuilder::visitStore(const StoreInst &I) {
   if (I.isAtomic())
     return visitAtomicStore(I);
@@ -3675,6 +3730,11 @@ void SelectionDAGBuilder::visitStore(const StoreInst &I) {
   Flags.setNoUnsignedWrap(true);
 
   unsigned ChainI = 0;
+  bool sgx_type = getSgxType(PtrV);
+  
+  if (sgx_type)
+	  MMOFlags |= MachineMemOperand::MOTargetFlag1;
+
   for (unsigned i = 0; i != NumValues; ++i, ++ChainI) {
     // See visitLoad comments.
     if (ChainI == MaxParallelChains) {
@@ -3685,14 +3745,17 @@ void SelectionDAGBuilder::visitStore(const StoreInst &I) {
     }
     SDValue Add = DAG.getNode(ISD::ADD, dl, PtrVT, Ptr,
                               DAG.getConstant(Offsets[i], dl, PtrVT), &Flags);
-    SDValue St = DAG.getStore(
+	
+	SDValue St = DAG.getStore(
         Root, dl, SDValue(Src.getNode(), Src.getResNo() + i), Add,
         MachinePointerInfo(PtrV, Offsets[i]), Alignment, MMOFlags, AAInfo);
+
     Chains[ChainI] = St;
   }
 
   SDValue StoreNode = DAG.getNode(ISD::TokenFactor, dl, MVT::Other,
-                                  makeArrayRef(Chains.data(), ChainI));
+	  makeArrayRef(Chains.data(), ChainI));
+
   DAG.setRoot(StoreNode);
 }
 
@@ -5774,10 +5837,20 @@ void SelectionDAGBuilder::LowerCallTo(ImmutableCallSite CS, SDValue Callee,
 
   const Value *SwiftErrorVal = nullptr;
   const TargetLowering &TLI = DAG.getTargetLoweringInfo();
+
+  const Function *CF = CS.getCalledFunction();
+  int index = 0;
+
   for (ImmutableCallSite::arg_iterator i = CS.arg_begin(), e = CS.arg_end();
        i != e; ++i) {
     const Value *V = *i;
-
+	MDNode *md_node = dyn_cast<MDNode>(CF->getMetadata("sgx_type")->getOperand(index).get());
+	std::string sgx_type_string = dyn_cast<MDString>(md_node->getOperand(0).get())->getString().str();
+	if (sgx_type_string.compare("private") == 0)
+		Entry.sgx_type = true;
+	else
+		Entry.sgx_type = false;
+	index++;
     // Skip empty types
     if (V->getType()->isEmptyTy())
       continue;
@@ -5818,6 +5891,14 @@ void SelectionDAGBuilder::LowerCallTo(ImmutableCallSite CS, SDValue Callee,
       .setTailCall(isTailCall)
       .setConvergent(CS.isConvergent());
   std::pair<SDValue, SDValue> Result = lowerInvokable(CLI, EHPadBB);
+
+
+  MDString *md_node = dyn_cast<MDString>(CF->getMetadata("sgx_return_type")->getOperand(0).get());
+  std::string sgx_type_string = md_node->getString().str();
+  if (sgx_type_string.compare("private") == 0)
+	  Result.first->register_sgx_type = 1;
+  else
+	  Result.first->register_sgx_type = 2;
 
   if (Result.first.getNode()) {
     const Instruction *Inst = CS.getInstruction();
@@ -7677,6 +7758,7 @@ TargetLowering::LowerCallTo(TargetLowering::CallLoweringInfo &CLI) const {
                            Args[i].Node.getResNo() + Value);
       ISD::ArgFlagsTy Flags;
       unsigned OriginalAlignment = DL.getABITypeAlignment(ArgTy);
+	  Flags.sgx_type = Args[i].sgx_type;
 
       if (Args[i].isZExt)
         Flags.setZExt();
@@ -8025,6 +8107,20 @@ void SelectionDAGISel::LowerArguments(const Function &F) {
           if (i == NumRegs - 1)
             MyFlags.Flags.setSplitEnd();
         }
+
+		bool sgx_type = false;
+		MDNode *func_md = F.getMetadata("sgx_type");
+		if (!func_md) {
+			errs() << "No MDD found!\n";
+			sgx_type = false;
+		}
+		else {
+			MDNode *arg_md = dyn_cast<MDNode> (func_md->getOperand(I->getArgNo()).get());
+			MDString *ptr_type_string = dyn_cast<MDString>(arg_md->getOperand(0).get());
+			sgx_type = ptr_type_string->getString().compare("private") == 0;
+		}
+		
+		MyFlags.sgx_type = sgx_type;
         Ins.push_back(MyFlags);
       }
       if (NeedsRegBlock && Value == NumValues - 1)

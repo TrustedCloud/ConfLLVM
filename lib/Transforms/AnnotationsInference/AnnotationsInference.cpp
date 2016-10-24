@@ -2,36 +2,22 @@
 #include "llvm/IR/Function.h"
 #include "llvm/Transforms/AnnotationsInference.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/IR/Module.h"
 #include "c++/z3++.h"
 #include "llvm/IR/Instructions.h"
 #include <fstream>
 #include <map>
 #include "z3.h"
 #include "llvm/Transforms/Scalar.h"
+#include "llvm/IR/Constants.h"
 using namespace llvm;
 
 namespace {
 	struct AnnotationsInference : public FunctionPass {
 		static char ID;
-		static std::map<std::string, std::vector<std::string>> function_signatures;
 
 		AnnotationsInference() : FunctionPass(ID) {
 			initializeAnnotationsInferencePass(*PassRegistry::getPassRegistry());
-			std::fstream signature_file;
-			signature_file.open("signatures.md", std::ios::in);
-			std::string line;
-			std::string present_function;
-			while (std::getline(signature_file, line)) {
-				if (line[0] != '\t') {
-					present_function = line;
-				}
-				else {
-					line.erase(0, 1);
-					function_signatures[present_function].push_back(line);
-				}
-			}
-			signature_file.close();
-
 		}
 		void insert_implies(std::string LHS, std::string RHS, int LHS_depth, int RHS_depth, std::map<std::string, z3::expr> &variables, std::map<std::string, int> &variables_depth, z3::solver &func_solver) {
 			std::string LHS_name = LHS;
@@ -42,9 +28,10 @@ namespace {
 			for (int i = 0; i < RHS_depth; i++) {
 				RHS_name = RHS_name + "$p";
 			}
+			//errs() << LHS << " " << RHS << "\n";
 			z3::expr condition = implies(variables.find(LHS_name)->second, variables.find(RHS_name)->second);
 			func_solver.add(condition);
-			errs() << "Inserted condition : " << LHS_name << " => " << RHS_name << "\n";
+			//errs() << "Inserted condition : " << LHS_name << " => " << RHS_name << "\n";
 			LHS_depth++;
 			RHS_depth++;
 			while (LHS_depth < variables_depth[LHS] && RHS_depth < variables_depth[RHS]) {
@@ -52,7 +39,7 @@ namespace {
 				RHS_name = RHS_name + "$p";
 				z3::expr condition = (variables.find(LHS_name)->second == variables.find(RHS_name)->second);
 				func_solver.add(condition);
-				errs() << "Inserted condition : " << LHS_name << " == " << RHS_name << "\n";
+				//errs() << "Inserted condition : " << LHS_name << " == " << RHS_name << "\n";
 				LHS_depth++;
 				RHS_depth++;
 			}
@@ -70,15 +57,11 @@ namespace {
 			}
 			z3::expr condition = implies(variables.find(LHS_name)->second, variables.find(RHS_name)->second);
 			func_solver.add(condition);
-			errs() << "Inserted condition : " << LHS_name << " => " << RHS_name << "\n";
+			//errs() << "Inserted condition : " << LHS_name << " => " << RHS_name << "\n";
 			return;
 		}
 		bool runOnFunction(Function &F) override {
-			errs() << "Inferring annotations for : " << F.getName() << "\n";
-			if (function_signatures.find(F.getName().str()) == function_signatures.end()) {
-				errs() << "Signatures for " << F.getName() << " not found. Run signature dump again\n";
-				return false;
-			}
+			//errs() << "Inferring annotations for : " << F.getName() << "\n";
 			z3::context func_context;
 			z3::solver func_solver(func_context);
 			
@@ -89,18 +72,55 @@ namespace {
 			std::map<std::string, z3::expr> variables;
 			std::map<std::string, int> variables_depth;
 
+
+			Module* module = F.getParent();
+
+			Module::GlobalListType& globals = module->getGlobalList();
+			for (auto glob_var = globals.begin(); glob_var != globals.end(); glob_var++) {
+				
+				Type *ty = glob_var->getType();
+				MDNode *md_node = glob_var->getMetadata("sgx_type");
+				int index = 0;
+				glob_var->dump();
+				std::string var_name = "@"+glob_var->getName().str();
+				int depth = 0;
+				while (1) {
+					variables.insert(std::pair<std::string, z3::expr>(var_name, func_context.bool_const(var_name.c_str())));
+					std::string type;
+					type = dyn_cast<MDString>(md_node->getOperand(index).get())->getString();
+					index++;
+					if (type.compare("public") == 0) {
+						z3::expr condition = variables.find(var_name)->second == false_const;
+						func_solver.add(condition);
+					}
+					else {
+						z3::expr condition = variables.find(var_name)->second == true_const;
+						func_solver.add(condition);
+					}
+					var_name = var_name + "$p";
+					depth++;
+
+					if (!ty->isPointerTy())
+						break;
+					ty = ty->getPointerElementType();
+
+				}
+				variables_depth["@"+glob_var->getName().str()] = depth;
+			}
 			Type *ty = F.getReturnType();
 			std::string var_name = "$result";
 			int depth = 1;
-			std::istringstream annotation(function_signatures[F.getName().str()][0]);
+			//std::istringstream annotation(function_signatures[F.getName().str()][0]);
+			MDNode *md_node = F.getMetadata("sgx_return_type");
+			int index = 0;
 			while (ty->isPointerTy()) {
-				errs() << "Creating var : " << var_name << "\n";
+				//errs() << "Creating var : " << var_name << "\n";
 				variables.insert(std::pair<std::string, z3::expr>(var_name, func_context.bool_const(var_name.c_str())));
 				ty = ty->getPointerElementType();
 				std::string type;
-				if (!(annotation >> type))
-					assert(false && "Inadequate number of constraints on arguments");
-				errs() << "Type = " << type << "\n";
+				type = dyn_cast<MDString>(md_node->getOperand(index).get())->getString();
+				index++;
+				//errs() << "Type = " << type << "\n";
 				if (type.compare("public") == 0) {
 					z3::expr condition = variables.find(var_name)->second == false_const;
 					func_solver.add(condition);
@@ -112,12 +132,11 @@ namespace {
 				var_name = var_name + "$p";
 				depth++;
 			}
-			errs() << "Creating var : " << var_name << "\n";
+			//errs() << "Creating var : " << var_name << "\n";
 			variables.insert(std::pair<std::string, z3::expr>(var_name, func_context.bool_const(var_name.c_str())));
 			std::string type;
-			if (!(annotation >> type))
-				assert(false && "Inadequate number of constraints on arguments");
-			errs() << "Type = " << type << "\n";
+			type = dyn_cast<MDString>(md_node->getOperand(index).get())->getString();
+			//errs() << "Type = " << type << "\n";
 			if (type.compare("public") == 0) {
 				z3::expr condition = variables.find(var_name)->second == false_const;
 				func_solver.add(condition);
@@ -130,22 +149,23 @@ namespace {
 
 
 
-			int arg_order = 1;
+			int arg_order = 0;
 			for (Function::arg_iterator Ai = F.arg_begin(); Ai != F.arg_end(); Ai++) {
-				std::istringstream annotation(function_signatures[F.getName().str()][arg_order]);
+				MDNode *md_node = dyn_cast<MDNode>(F.getMetadata("sgx_type")->getOperand(arg_order).get());
 				arg_order++;
 				Argument &A = *Ai;
 				std::string arg_name = A.getName().str();
 				Type *ty = A.getType();
 				int depth = 1;
+				int index = 0;
 				while (ty->isPointerTy()) {
-					errs() << "Creating var : " << arg_name << "\n";
+					//errs() << "Creating var : " << arg_name << "\n";
 					variables.insert(std::pair<std::string, z3::expr>(arg_name, func_context.bool_const(arg_name.c_str())));
 					ty = ty->getPointerElementType();
 					std::string type;
-					if (!(annotation >> type))
-						assert(false && "Inadequate number of constraints on arguments");
-					errs() << "Type = " << type << "\n";
+					type = dyn_cast<MDString>(md_node->getOperand(index).get())->getString();
+					index++;
+					//errs() << "Type = " << type << "\n";
 					if (type.compare("public") == 0) {
 						z3::expr condition = variables.find(arg_name)->second == false_const;
 						func_solver.add(condition);
@@ -157,12 +177,11 @@ namespace {
 					arg_name = arg_name + "$p";
 					depth++;
 				}
-				errs() << "Creating var : " << arg_name << "\n";
+				//errs() << "Creating var : " << arg_name << "\n";
 				variables.insert(std::pair<std::string, z3::expr>(arg_name, func_context.bool_const(arg_name.c_str())));
 				std::string type;
-				if (!(annotation >> type))
-					assert(false && "Inadequate number of constraints on arguments");
-				errs() << "Type = " << type << "\n";
+				type = dyn_cast<MDString>(md_node->getOperand(index).get())->getString();
+				//errs() << "Type = " << type << "\n";
 				if (type.compare("public") == 0) {
 					z3::expr condition = variables.find(arg_name)->second == false_const;
 					func_solver.add(condition);
@@ -183,13 +202,13 @@ namespace {
 						Type *ty = I.getType();
 						int depth = 1;
 						while (ty->isPointerTy()) {
-							errs() << "Creating var : " << var_name << "\n";
+							//errs() << "Creating var : " << var_name << "\n";
 							variables.insert(std::pair<std::string, z3::expr>(var_name, func_context.bool_const(var_name.c_str())));
 							var_name = var_name + "$p";
 							ty = ty->getPointerElementType();
 							depth++;
 						}
-						errs() << "Creating var : " << var_name << "\n";
+						//errs() << "Creating var : " << var_name << "\n";
 						variables.insert(std::pair<std::string, z3::expr>(var_name, func_context.bool_const(var_name.c_str())));
 						variables_depth[I.getName().str()] = depth;
 					}
@@ -202,18 +221,33 @@ namespace {
 					if (I.getOpcode() == Instruction::Load) {
 						std::string var_name = I.getName().str();
 						std::string arg_name = I.getOperand(0)->getName().str();
+						if (isa<GlobalVariable>(I.getOperand(0))) {
+							arg_name = "@" + arg_name;
+						}
 						insert_implies(arg_name, var_name, 1, 0, variables, variables_depth, func_solver);
 						insert_implies_only(arg_name, var_name, 0, 0, variables, variables_depth, func_solver);
 					}
 					else if (I.getOpcode() == Instruction::Store) {
 						std::string arg1_name = I.getOperand(0)->getName().str();
+						if (isa<GlobalVariable>(I.getOperand(0))) {
+							arg1_name = "@" + arg1_name;
+						}
 						std::string arg2_name = I.getOperand(1)->getName().str();
+						if (isa<GlobalVariable>(I.getOperand(1))) {
+							arg2_name = "@" + arg2_name;
+						}
 						if (arg1_name.compare(""))
 							insert_implies(arg1_name, arg2_name, 0, 1, variables, variables_depth, func_solver);
 					}
 					else if (BinaryOperator *BO = dyn_cast<BinaryOperator>(Ii)) {
 						std::string arg1_name = BO->getOperand(0)->getName().str();
+						if (isa<GlobalVariable>(I.getOperand(0))) {
+							arg1_name = "@" + arg1_name;
+						}
 						std::string arg2_name = BO->getOperand(1)->getName().str();
+						if (isa<GlobalVariable>(I.getOperand(1))) {
+							arg2_name = "@" + arg2_name;
+						}
 						std::string var_name = BO->getName().str();
 						if (arg1_name.compare(""))
 							insert_implies(arg1_name, var_name, 0, 0, variables, variables_depth, func_solver);
@@ -224,22 +258,159 @@ namespace {
 						if (RO->getNumOperands() == 0)
 							continue;
 						std::string arg1_name = RO->getOperand(0)->getName().str();
+						if (isa<GlobalVariable>(I.getOperand(0))) {
+							arg1_name = "@" + arg1_name;
+						}
 						if (arg1_name.compare(""))
 							insert_implies(arg1_name, "$result", 0, 0, variables, variables_depth, func_solver);
+					}
+					else if (CallInst *CI = dyn_cast<CallInst>(Ii)) {
+						Function *TF = CI->getCalledFunction();
+						if (TF == NULL)
+							continue;
+						int index = 0;
+						std::string type;
+						MDNode *func_md = TF->getMetadata("sgx_type");
+						for (CallInst::op_iterator Oi = CI->arg_begin(); Oi != CI->arg_end(); Oi++) {
+							std::string op_name = (*Oi)->getName();
+							if (isa<GlobalVariable>(*Oi)) {
+								op_name = "@" + op_name;
+							}
+							if (op_name.compare("")==0) {
+								index++;
+								continue;
+							}
+							int op_depth = variables_depth[op_name];
+							MDNode* arg_md = dyn_cast<MDNode>(func_md->getOperand(index).get());
+							int md_depth = arg_md->getNumOperands();
+							op_depth = op_depth < md_depth ? op_depth : md_depth;
+							type = dyn_cast<MDString>(arg_md->getOperand(0).get())->getString();	
+							if (type.compare("public") == 0) {
+								z3::expr condition = implies(variables.find(op_name)->second, false_const);
+								func_solver.add(condition);
+							}
+							else {
+								z3::expr condition = implies(variables.find(op_name)->second, true_const);
+								func_solver.add(condition);
+							}
+							op_name = op_name + "$p";
+							for (int i = 1; i < op_depth; i++) {
+								type = dyn_cast<MDString>(arg_md->getOperand(i).get())->getString();
+								if (type.compare("public") == 0) {
+									z3::expr condition = variables.find(op_name)->second == false_const;
+									func_solver.add(condition);
+								}
+								else {
+									z3::expr condition = variables.find(op_name)->second == true_const;
+									func_solver.add(condition);
+								}
+								op_name = op_name + "$p";
+							}
+							index++;
+						}
+						MDNode *func_ret_node = TF->getMetadata("sgx_return_type");
+						std::string ret_name = CI->getName();
+						if (isa<GlobalVariable>(CI)) {
+							ret_name = "@" + ret_name;
+						}
+						int ret_depth = variables_depth[ret_name];
+						int ret_md_depth = func_ret_node->getNumOperands();
+						ret_depth = ret_depth < ret_md_depth ? ret_depth : ret_md_depth;
+						type = dyn_cast<MDString>(func_ret_node->getOperand(0).get())->getString();
+						if (type.compare("public") == 0) {
+							z3::expr condition = implies(false_const, variables.find(ret_name)->second);
+							func_solver.add(condition);
+						}
+						else {
+							z3::expr condition = implies(true_const, variables.find(ret_name)->second);
+							func_solver.add(condition);
+						}
+						ret_name = ret_name + "$p";
+						for (int i = 1; i < ret_depth; i++) {
+							type = dyn_cast<MDString>(func_ret_node->getOperand(i).get())->getString();
+							if (type.compare("public") == 0) {
+								z3::expr condition = variables.find(ret_name)->second == false_const;
+								func_solver.add(condition);
+							}
+							else {
+								z3::expr condition = variables.find(ret_name)->second == true_const;
+								func_solver.add(condition);
+							}
+							ret_name = ret_name + "$p";
+						}
+					}
+					else if (GetElementPtrInst *GI = dyn_cast<GetElementPtrInst>(Ii)) {
+						Type *ty = GI->getOperand(0)->getType();
+						std::string result = GI->getName().str();
+						std::string param = GI->getOperand(0)->getName();
+						if (isa<GlobalVariable>(I.getOperand(0))) {
+							param = "@" + param;
+						}
+						
+						if (GI->getNumIndices() == 2 && ty->getPointerElementType()->isStructTy()) {
+							std::string struct_name = ty->getPointerElementType()->getStructName().str();
+							z3::expr condition = variables.find(result)->second == variables.find(param)->second;
+							func_solver.add(condition);
+							z3::expr condition2 = variables.find(result + "$p")->second == variables.find(param + "$p")->second;
+							func_solver.add(condition2);
+							int res_depth = variables_depth[result];
+							result = result + "$p";
+							param = param + "$p";
+
+							if (res_depth > 2) {
+								
+								Module* module = GI->getModule();
+								NamedMDNode *md = module->getNamedMetadata("struct_sgx_type");
+								MDNode *struct_md;
+								for (unsigned int i = 0; i < md->getNumOperands(); i++) {
+									MDNode *s_md = md->getOperand(i);
+									std::string  s_name = dyn_cast<MDString>(s_md->getOperand(0).get())->getString().str();
+									if (s_name.compare(struct_name) == 0) {
+										struct_md = dyn_cast<MDNode>(s_md->getOperand(1).get());
+										break;
+									}
+								}
+								int f_id = dyn_cast<ConstantInt>(GI->idx_end()-1)->getZExtValue();
+								MDNode *field_md = dyn_cast<MDNode>(struct_md->getOperand(f_id).get());		
+								for (int i = 2; i < res_depth; i++) {
+									bool sgx_type;
+									std::string sgx_string = dyn_cast<MDString>(field_md->getOperand(i-2).get())->getString().str();
+									sgx_type = sgx_string.compare("private") == 0;
+									result = result + "$p";
+									if (sgx_type) {
+										z3::expr condition = variables.find(result)->second == true_const;
+										func_solver.add(condition);
+									}
+									else {
+										z3::expr condition = variables.find(result)->second == false_const;
+										func_solver.add(condition);
+									}
+								}
+							}	
+						}
+						else if (GI->getNumIndices() == 1) {
+							z3::expr condition = variables.find(result)->second == variables.find(param)->second;
+							insert_implies(param, result, 0, 0, variables, variables_depth, func_solver);
+						}
 					}
 				}
 			}
 			
 			bool solved = func_solver.check();
-			
+			if (solved == false) {
+				llvm::errs() << "No solution for annotations inference. Check for invalid assignments!\n";
+				return false;
+			}
+			(void)solved;
 			z3::model func_model = func_solver.get_model();
 			
 			for (auto Vi = variables.begin(); Vi != variables.end(); Vi++ ) {
 				std::ostringstream ss;
 				ss << func_model.eval(Vi->second);
 				std::string type = ss.str().compare("true") == 0 ? "private" : "public";
-				errs() << Vi->first << ":" << type <<"\n";
+				//errs() << Vi->first << ":" << type <<"\n";
 			}
+
 			for (Function::iterator BBi = F.begin(); BBi != F.end(); BBi++) {
 				BasicBlock &BB = *BBi;
 				for (BasicBlock::iterator Ii = BB.begin(); Ii != BB.end(); Ii++) {
@@ -260,8 +431,6 @@ namespace {
 					I.setMetadata("sgx_type", md_node);
 				}
 			}
-
-
 			return false;
 		}
 		virtual void getAnalysisUsage(AnalysisUsage&Info) {
@@ -271,7 +440,6 @@ namespace {
 }
 
 char AnnotationsInference::ID = 0;
-std::map<std::string, std::vector<std::string>> AnnotationsInference::function_signatures;
 
 INITIALIZE_PASS(AnnotationsInference, "annotations-inference", "Infer annotations for all instructions in the functions", false, false);
 

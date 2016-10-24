@@ -65,7 +65,8 @@ namespace ISD {
     uint64_t Flags;
 
   public:
-    ArgFlagsTy() : Flags(0) { }
+	bool sgx_type;
+    ArgFlagsTy() : Flags(0), sgx_type(false) { }
 
     bool isZExt()      const { return Flags & ZExt; }
     void setZExt()     { Flags |= One << ZExtOffs; }
@@ -147,7 +148,7 @@ namespace ISD {
     MVT VT;
     EVT ArgVT;
     bool Used;
-
+	
     /// Index original Function's argument.
     unsigned OrigArgIndex;
     /// Sentinel value for implicit machine-level input arguments.
@@ -157,8 +158,9 @@ namespace ISD {
     /// original argument. E.g. if argument was splitted into four 32 bit
     /// registers, we got 4 InputArgs with PartOffsets 0, 4, 8 and 12.
     unsigned PartOffset;
+	bool sgx_type;
 
-    InputArg() : VT(MVT::Other), Used(false) {}
+    InputArg() : VT(MVT::Other), Used(false), sgx_type(false) {}
     InputArg(ArgFlagsTy flags, EVT vt, EVT argvt, bool used,
              unsigned origIdx, unsigned partOffs)
       : Flags(flags), Used(used), OrigArgIndex(origIdx), PartOffset(partOffs) {

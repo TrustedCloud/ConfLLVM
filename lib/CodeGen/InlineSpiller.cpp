@@ -38,6 +38,8 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetInstrInfo.h"
 
+
+#include "llvm/Transforms/AnnotationsInference.h"
 using namespace llvm;
 
 #define DEBUG_TYPE "regalloc"
@@ -144,8 +146,11 @@ class InlineSpiller : public Spiller {
   // Variables that are valid during spill(), but used by multiple methods.
   LiveRangeEdit *Edit;
   LiveInterval *StackInt;
+
+
   int StackSlot;
   unsigned Original;
+  int realized_sgx_type;
 
   // All registers to spill to StackSlot, including the main register.
   SmallVector<unsigned, 8> RegsToSpill;
@@ -390,7 +395,9 @@ bool InlineSpiller::hoistSpillInsideBB(LiveInterval &SpillLI,
   // Insert spill without kill flag immediately after def.
   TII.storeRegToStackSlot(*MBB, MII, SrcReg, false, StackSlot,
                           MRI.getRegClass(SrcReg), &TRI);
+
   --MII; // Point to store instruction.
+  MII->sgx_type = realized_sgx_type;
   LIS.InsertMachineInstrInMaps(*MII);
   DEBUG(dbgs() << "\thoisted: " << SrcVNI->def << '\t' << *MII);
 
@@ -596,9 +603,9 @@ void InlineSpiller::reMaterializeAll() {
 
       // Debug values are not allowed to affect codegen.
       if (MI.isDebugValue())
-        continue;
-
+        continue; 
       anyRemat |= reMaterializeFor(LI, MI);
+	  
     }
   }
   if (!anyRemat)
@@ -767,9 +774,10 @@ foldMemoryOperand(ArrayRef<std::pair<MachineInstr*, unsigned> > Ops,
   MachineInstr *FoldMI =
       LoadMI ? TII.foldMemoryOperand(*MI, FoldOps, *LoadMI, &LIS)
              : TII.foldMemoryOperand(*MI, FoldOps, StackSlot, &LIS);
+  
   if (!FoldMI)
     return false;
-
+  FoldMI->sgx_type = realized_sgx_type;
   // Remove LIS for any dead defs in the original MI not in FoldMI.
   for (MIBundleOperands MO(*MI); MO.isValid(); ++MO) {
     if (!MO->isReg())
@@ -837,7 +845,10 @@ void InlineSpiller::insertReload(unsigned NewVReg,
   MachineInstrSpan MIS(MI);
   TII.loadRegFromStackSlot(MBB, MI, NewVReg, StackSlot,
                            MRI.getRegClass(NewVReg), &TRI);
-
+  
+  MI--;
+  MI->sgx_type = realized_sgx_type;
+  MI++;
   LIS.InsertMachineInstrRangeInMaps(MIS.begin(), MI);
 
   DEBUG(dumpMachineInstrRangeWithSlotIndex(MIS.begin(), MI, LIS, "reload",
@@ -853,6 +864,9 @@ void InlineSpiller::insertSpill(unsigned NewVReg, bool isKill,
   MachineInstrSpan MIS(MI);
   TII.storeRegToStackSlot(MBB, std::next(MI), NewVReg, isKill, StackSlot,
                           MRI.getRegClass(NewVReg), &TRI);
+  MI++;
+  MI->sgx_type = realized_sgx_type;
+  MI--;
 
   LIS.InsertMachineInstrRangeInMaps(std::next(MI), MIS.end());
 
@@ -862,17 +876,38 @@ void InlineSpiller::insertSpill(unsigned NewVReg, bool isKill,
   HSpiller.addToMergeableSpills(*std::next(MI), StackSlot, Original);
 }
 
+
+bool isDefOf(MachineInstr* MI, unsigned Reg) {
+	for (MachineOperand* MO = MI->defs().begin(); MO != MI->defs().end(); MO++) {
+		if (MO->isReg() && MO->getReg() == Reg)
+			return true;
+	}
+	return false;
+}
+
 /// spillAroundUses - insert spill code around each use of Reg.
 void InlineSpiller::spillAroundUses(unsigned Reg) {
   DEBUG(dbgs() << "spillAroundUses " << PrintReg(Reg) << '\n');
   LiveInterval &OldLI = LIS.getInterval(Reg);
+  
+  /* 
+  MachineRegisterInfo::reg_bundle_iterator RegI = MRI.reg_bundle_begin(Reg);
+  MachineInstr *MI = &*(RegI);
+  //errs() << "SPILLING - ";
+  //MI->dump();
+
+  int sgx_type = inferMIRRegisterType(MI, Reg);
+  realized_sgx_type = sgx_type;
+  */
 
   // Iterate over instructions using Reg.
   for (MachineRegisterInfo::reg_bundle_iterator
        RegI = MRI.reg_bundle_begin(Reg), E = MRI.reg_bundle_end();
        RegI != E; ) {
     MachineInstr *MI = &*(RegI++);
-
+	if (isDefOf(MI, Reg)) {
+		realized_sgx_type = inferMIRRegisterType(MI, Reg);
+	}
     // Debug values are not allowed to affect codegen.
     if (MI->isDebugValue()) {
       // Modify DBG_VALUE now that the value is in a spill slot.
@@ -1037,7 +1072,7 @@ void InlineSpiller::spill(LiveRangeEdit &edit) {
 
   collectRegsToSpill();
   reMaterializeAll();
-
+  
   // Remat may handle everything.
   if (!RegsToSpill.empty())
     spillAll();

@@ -612,6 +612,21 @@ void MIPrinter::print(const MachineInstr &MI) {
       NeedComma = true;
     }
   }
+ /* if (NeedComma)
+	  OS << ", ";
+  NeedComma = false;
+  if (MI.sgx_type == 1) {
+	  OS << "sgx_private_yaml";
+	  NeedComma = true;
+  }
+  else if (MI.sgx_type == 2) {
+	  OS << "sgx_public_yaml";
+	  NeedComma = true;
+  }
+  else {
+	  OS << "sgx_undef_yaml";
+	  NeedComma = true;
+  }*/
 }
 
 void MIPrinter::printMBBReference(const MachineBasicBlock &MBB) {

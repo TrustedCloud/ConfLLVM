@@ -2453,6 +2453,15 @@ X86TargetLowering::LowerMemArgument(SDValue Chain, CallingConv::ID CallConv,
                                     const CCValAssign &VA,
                                     MachineFrameInfo &MFI, unsigned i) const {
   // Create the nodes corresponding to a load from this parameter slot.
+
+
+
+	errs() << "I = " << i << "\n";
+	bool sgx_type = Ins[i].sgx_type;
+  auto MMOFlags = MachineMemOperand::MONone;
+  if (sgx_type)
+	  MMOFlags |= MachineMemOperand::MOTargetFlag1;
+
   ISD::ArgFlagsTy Flags = Ins[i].Flags;
   bool AlwaysUseMutable = shouldGuaranteeTCO(
       CallConv, DAG.getTarget().Options.GuaranteedTailCallOpt);
@@ -2512,9 +2521,10 @@ X86TargetLowering::LowerMemArgument(SDValue Chain, CallingConv::ID CallConv,
     }
 
     SDValue FIN = DAG.getFrameIndex(FI, getPointerTy(DAG.getDataLayout()));
+	FIN.getNode()->sgx_type = sgx_type ? 1 : 2;
     SDValue Val = DAG.getLoad(
         ValVT, dl, Chain, FIN,
-        MachinePointerInfo::getFixedStack(DAG.getMachineFunction(), FI));
+        MachinePointerInfo::getFixedStack(DAG.getMachineFunction(), FI), 0, MMOFlags);
     return ExtendedInMem ?
       DAG.getNode(ISD::TRUNCATE, dl, VA.getValVT(), Val) : Val;
   }
@@ -2654,6 +2664,13 @@ SDValue X86TargetLowering::LowerFormalArguments(
 
       unsigned Reg = MF.addLiveIn(VA.getLocReg(), RC);
       ArgValue = DAG.getCopyFromReg(Chain, dl, Reg, RegVT);
+	  int sgx_type;
+	  if (Ins[i].sgx_type)
+		  sgx_type = 1;
+	  else
+		  sgx_type = 2;
+	  ArgValue->getOperand(1)->sgx_type = sgx_type;
+	  MF.live_in_types.push_back(sgx_type);
 
       // If this is an 8 or 16-bit value, it is really passed promoted to 32
       // bits.  Insert an assert[sz]ext to capture this, then truncate to the
@@ -2913,10 +2930,12 @@ SDValue X86TargetLowering::LowerMemOpCallTo(SDValue Chain, SDValue StackPtr,
                        StackPtr, PtrOff);
   if (Flags.isByVal())
     return CreateCopyOfByValArgument(Arg, PtrOff, Chain, Flags, DAG, dl);
-
+  MachineMemOperand::Flags MMOFlags = MachineMemOperand::MONone;
+  if (Flags.sgx_type)
+	  MMOFlags |= MachineMemOperand::MOTargetFlag1;
   return DAG.getStore(
       Chain, dl, Arg, PtrOff,
-      MachinePointerInfo::getStack(DAG.getMachineFunction(), LocMemOffset));
+      MachinePointerInfo::getStack(DAG.getMachineFunction(), LocMemOffset),0,MMOFlags);
 }
 
 /// Emit a load of return address if tail call

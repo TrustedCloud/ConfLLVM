@@ -497,6 +497,7 @@ static MachineInstr *foldPatchpoint(MachineFunction &MF, MachineInstr &MI,
 MachineInstr *TargetInstrInfo::foldMemoryOperand(MachineInstr &MI,
                                                  ArrayRef<unsigned> Ops, int FI,
                                                  LiveIntervals *LIS) const {
+
   auto Flags = MachineMemOperand::MONone;
   for (unsigned i = 0, e = Ops.size(); i != e; ++i)
     if (MI.getOperand(Ops[i]).isDef())
@@ -520,7 +521,7 @@ MachineInstr *TargetInstrInfo::foldMemoryOperand(MachineInstr &MI,
     // Ask the target to do the actual folding.
     NewMI = foldMemoryOperandImpl(MF, MI, Ops, MI, FI, LIS);
   }
-
+  
   if (NewMI) {
     NewMI->setMemRefs(MI.memoperands_begin(), MI.memoperands_end());
     // Add a memory operand, foldMemoryOperandImpl doesn't do that.
@@ -556,7 +557,10 @@ MachineInstr *TargetInstrInfo::foldMemoryOperand(MachineInstr &MI,
     storeRegToStackSlot(*MBB, Pos, MO.getReg(), MO.isKill(), FI, RC, TRI);
   else
     loadRegFromStackSlot(*MBB, Pos, MO.getReg(), FI, RC, TRI);
-  return &*--Pos;
+  
+  Pos--;
+  
+  return &*Pos;
 }
 
 bool TargetInstrInfo::hasReassociableOperands(

@@ -92,6 +92,9 @@ static cl::opt<bool> VerifyMachineCode("verify-machineinstrs", cl::Hidden,
     cl::desc("Verify generated machine code"),
     cl::init(false),
     cl::ZeroOrMore);
+static cl::opt<bool> GenerateSgxCode("generate-sgx-code", cl::Hidden,
+	cl::desc("Generate code for SGX(Some machine optimizations will be disabled)"));
+
 
 static cl::opt<std::string>
 PrintMachineInstrs("print-machineinstrs", cl::ValueOptional,
@@ -588,7 +591,8 @@ void TargetPassConfig::addMachinePasses() {
   }
 
   // Run pre-ra passes.
-  addPreRegAlloc();
+  if(!GenerateSgxCode)
+	addPreRegAlloc();
 
   // Run register allocation and passes that are tightly coupled with it,
   // including phi elimination and scheduling.

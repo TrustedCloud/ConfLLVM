@@ -569,6 +569,15 @@ void SDNode::print_details(raw_ostream &OS, const SelectionDAG *G) const {
     if (unsigned C = L->getColumn())
       OS << ':' << C;
   }
+  if (sgx_type == 1)
+	  OS << " sgx_private";
+  else if(sgx_type == 2)
+	  OS << " sgx_public";
+
+  if (register_sgx_type == 1)
+	  OS << " register_sgx_private";
+  else if (register_sgx_type == 2)
+	  OS << " register_sgx_public";
 }
 
 /// Return true if this node is so simple that we should just print it inline

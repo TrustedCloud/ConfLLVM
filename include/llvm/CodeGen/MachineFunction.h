@@ -251,6 +251,7 @@ class MachineFunction {
   MachineFunction(const MachineFunction &) = delete;
   void operator=(const MachineFunction&) = delete;
 public:
+  std::vector<unsigned int> live_in_types;
   MachineFunction(const Function *Fn, const TargetMachine &TM,
                   unsigned FunctionNum, MachineModuleInfo &MMI);
   ~MachineFunction();

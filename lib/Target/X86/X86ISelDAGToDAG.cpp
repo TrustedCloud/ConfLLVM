@@ -1930,7 +1930,6 @@ void X86DAGToDAGISel::Select(SDNode *Node) {
   unsigned Opc, MOpc;
   unsigned Opcode = Node->getOpcode();
   SDLoc dl(Node);
-
   DEBUG(dbgs() << "Selecting: "; Node->dump(CurDAG); dbgs() << '\n');
 
   if (Node->isMachineOpcode()) {

@@ -44,9 +44,13 @@
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/ELF.h"
 #include "llvm/Target/TargetLoweringObjectFile.h"
+#include <sstream>
 
 using namespace llvm;
 
+cl::opt<int> SgxStackSize("sgx-stack-size", cl::desc("Stack size for sgx stacks"), cl::value_desc("stack size"));
+cl::opt<bool> NonMpxChecks("non-mpx-checks", cl::desc("Generate non mpx checks(less effecient)"), cl::value_desc("bool"));
+	
 namespace {
 
 /// X86MCInstLower - This class is used to lower an MachineInstr into an MCInst.
@@ -74,6 +78,8 @@ private:
 };
 
 } // end anonymous namespace
+
+int getMemLocation(const MachineInstr *MI);
 
 // Emit a minimal sequence of nops spanning NumBytes bytes.
 static void EmitNops(MCStreamer &OS, unsigned NumBytes, bool Is64Bit,
@@ -389,10 +395,35 @@ X86MCInstLower::LowerMachineOperand(const MachineInstr *MI,
 void X86MCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {
   OutMI.setOpcode(MI->getOpcode());
 
-  for (const MachineOperand &MO : MI->operands())
-    if (auto MaybeMCOp = LowerMachineOperand(MI, MO))
-      OutMI.addOperand(MaybeMCOp.getValue());
 
+  int i = 0;
+  for (const MachineOperand &MO : MI->operands()) {
+	  MachineOperand new_MO = MO;
+	 /*
+	  if (MI->hasOneMemOperand()) {
+		  if (MI->sgx_type == 1) {
+			  int index = getMemLocation(MI);
+			  if (index + 3 == i) {
+				  if (MI->getOperand(0 + index).getReg() == X86::RSP || MI->getOperand(0 + index).getReg() == X86::ESP || MI->getOperand(0 + index).getReg() == X86::EBP || MI->getOperand(0 + index).getReg() == X86::RBP) {
+					  new_MO.setImm(MO.getImm() - SgxStackSize);
+				  }
+			  }
+		  }
+	  }
+	  else */ 
+      if (MI->sgx_type == 1) {
+		  int index = getMemLocation(MI);
+		  if (index + 3 == i) {
+			  if (MI->getOperand(0 + index).getReg() == X86::RSP || MI->getOperand(0 + index).getReg() == X86::ESP || MI->getOperand(0 + index).getReg() == X86::EBP || MI->getOperand(0 + index).getReg() == X86::RBP) {
+				  new_MO.setImm(MO.getImm() - SgxStackSize);
+			  }
+		  }
+	  }
+	  if (auto MaybeMCOp = LowerMachineOperand(MI, new_MO))
+		  OutMI.addOperand(MaybeMCOp.getValue());
+	  i++;
+  }
+    
   // Handle a few special cases to eliminate operand modifiers.
 ReSimplify:
   switch (OutMI.getOpcode()) {
@@ -1226,9 +1257,107 @@ static std::string getShuffleComment(const MachineOperand &DstOp,
   return Comment;
 }
 
+
+
+int getMemLocation(const MachineInstr *MI) {
+	int i = 0;
+	for (auto MO = MI->getDesc().OpInfo; MO != NULL; MO++) {
+		if (MO->OperandType == MCOI::OPERAND_MEMORY)
+			return i;
+		i++;
+	}
+	return -1;
+}
 void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
   X86MCInstLower MCInstLowering(*MF, *this);
   const X86RegisterInfo *RI = MF->getSubtarget<X86Subtarget>().getRegisterInfo();
+  if (MI->hasOneMemOperand()) {
+	  std::string sgx_type;
+	  unsigned bnd_reg;
+	  int address_offset = 0;
+
+
+
+	  int index = getMemLocation(MI);
+	  if (index == -1) {
+		  llvm_unreachable("Cant find position of mem operand!");
+	  }
+
+	  if (MI->sgx_type == 1) {
+		  sgx_type = "private";
+		  bnd_reg = X86::BND0;
+		  if (MI->getOperand(0 + index).getReg() == X86::RSP || MI->getOperand(0 + index).getReg() == X86::ESP || MI->getOperand(0 + index).getReg() == X86::EBP || MI->getOperand(0 + index).getReg() == X86::RBP) {
+			  address_offset = -SgxStackSize;
+		  }
+	  }
+	  else if (MI->sgx_type == 2) {
+		  sgx_type = "public";
+		  bnd_reg = X86::BND1;
+	  }
+	  else {
+		  MI->dump();
+		  llvm_unreachable("mem_operand with no type?");
+	  }
+	  
+
+
+
+	  if (!NonMpxChecks) {
+		  MCInstBuilder MIB_L = MCInstBuilder(X86::BNDCL32rm).addReg(bnd_reg);
+		  MCInstBuilder MIB_U = MCInstBuilder(X86::BNDCU32rm).addReg(bnd_reg);
+		  
+		  MIB_L.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(0 + index)).getValue());
+		  MIB_U.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(0 + index)).getValue());
+
+		  MIB_L.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(1 + index)).getValue());
+		  MIB_U.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(1 + index)).getValue());
+
+		  MIB_L.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(2 + index)).getValue());
+		  MIB_U.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(2 + index)).getValue());
+
+		  if (MI->getOperand(3 + index).isImm()) {
+			  MIB_L.addImm(MI->getOperand(3 + index).getImm() + address_offset);
+			  MIB_U.addImm(MI->getOperand(3 + index).getImm() + address_offset);
+		  }
+		  else if (MI->getOperand(3 + index).isGlobal()) {
+			  MIB_L.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(3 + index)).getValue());
+			  MIB_U.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(3 + index)).getValue());
+		  }
+		  else {
+			  llvm_unreachable("Unknown type");
+		  }
+		  MIB_L.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(4 + index)).getValue());
+		  MIB_U.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(4 + index)).getValue());
+
+		  OutStreamer->EmitInstruction(MIB_L, getSubtargetInfo());
+		  OutStreamer->EmitInstruction(MIB_U, getSubtargetInfo());
+	  }
+	  else {
+		  OutStreamer->EmitInstruction(MCInstBuilder(X86::PUSH32r).addReg(X86::EAX), getSubtargetInfo());
+		  MCInstBuilder MIB = MCInstBuilder(X86::LEA32r).addReg(X86::EAX);
+
+		  MIB.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(0 + index)).getValue());	 
+		  MIB.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(1 + index)).getValue());
+		  MIB.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(2 + index)).getValue());	 
+		  if (MI->getOperand(3 + index).isImm()) {
+			  int esp_offset = 0;
+			  if (MI->getOperand(0 + index).getReg() == X86::ESP) {
+				  esp_offset = 4;
+			  }
+			  MIB.addImm(MI->getOperand(3 + index).getImm() + address_offset + esp_offset);
+		  }
+		  else if (MI->getOperand(3 + index).isGlobal()) {
+			  MIB.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(3 + index)).getValue());
+		  }
+		  else {
+			  llvm_unreachable("Unknown type");
+		  }
+		  MIB.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(4 + index)).getValue());
+		  OutStreamer->EmitInstruction(MIB, getSubtargetInfo());
+		  OutStreamer->EmitRawText("\tcalll\t__sgx_"+sgx_type+"_check_routine");
+		  OutStreamer->EmitInstruction(MCInstBuilder(X86::POP32r).addReg(X86::EAX), getSubtargetInfo());
+	  }
+  }
 
   switch (MI->getOpcode()) {
   case TargetOpcode::DBG_VALUE:

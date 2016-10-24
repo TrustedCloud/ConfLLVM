@@ -174,8 +174,11 @@ EmitCopyFromReg(SDNode *Node, unsigned ResNo, bool IsClone, bool IsCloned,
   } else {
     // Create the reg, emit the copy.
     VRBase = MRI->createVirtualRegister(DstRC);
-    BuildMI(*MBB, InsertPos, Node->getDebugLoc(), TII->get(TargetOpcode::COPY),
+	MachineInstrBuilder MIB=BuildMI(*MBB, InsertPos, Node->getDebugLoc(), TII->get(TargetOpcode::COPY),
             VRBase).addReg(SrcReg);
+	MIB.getInstr()->sgx_type = Node->sgx_type;
+	MIB.getInstr()->register_sgx_type = Node->register_sgx_type;
+
   }
 
   SDValue Op(Node, ResNo);
@@ -337,8 +340,9 @@ InstrEmitter::AddRegisterOperand(MachineInstrBuilder &MIB,
            "Expected VReg");
     if (DstRC && !MRI->constrainRegClass(VReg, DstRC, MinRCSize)) {
       unsigned NewVReg = MRI->createVirtualRegister(DstRC);
-      BuildMI(*MBB, InsertPos, Op.getNode()->getDebugLoc(),
+	  MachineInstrBuilder MIB = BuildMI(*MBB, InsertPos, Op.getNode()->getDebugLoc(),
               TII->get(TargetOpcode::COPY), NewVReg).addReg(VReg);
+	  MIB.getInstr()->sgx_type = Op->sgx_type;
       VReg = NewVReg;
     }
   }
@@ -784,7 +788,9 @@ EmitMachineNode(SDNode *Node, bool IsClone, bool IsCloned,
 
   // Create the new machine instruction.
   MachineInstrBuilder MIB = BuildMI(*MF, Node->getDebugLoc(), II);
-
+  MIB.getInstr()->sgx_type = Node->sgx_type;
+  MIB.getInstr()->register_sgx_type = Node->register_sgx_type;
+  
   // Add result register values for things that are defined by this
   // instruction.
   if (NumResults)

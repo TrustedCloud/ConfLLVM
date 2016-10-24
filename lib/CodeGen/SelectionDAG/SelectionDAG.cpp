@@ -5097,7 +5097,9 @@ SDValue SelectionDAG::getLoad(ISD::MemIndexedMode AM, ISD::LoadExtType ExtType,
 
   SDVTList VTs = Indexed ?
     getVTList(VT, Ptr.getValueType(), MVT::Other) : getVTList(VT, MVT::Other);
-  SDValue Ops[] = { Chain, Ptr, Offset };
+
+
+  SDValue Ops[] = { Chain, Ptr, Offset};
   FoldingSetNodeID ID;
   AddNodeIDNode(ID, ISD::LOAD, VTs, Ops);
   ID.AddInteger(MemVT.getRawBits());
@@ -5113,7 +5115,10 @@ SDValue SelectionDAG::getLoad(ISD::MemIndexedMode AM, ISD::LoadExtType ExtType,
   auto *N = newSDNode<LoadSDNode>(dl.getIROrder(), dl.getDebugLoc(), VTs, AM,
                                   ExtType, MemVT, MMO);
   createOperands(N, Ops);
-
+  if (MMO->getFlags() & MachineMemOperand::MOTargetFlag1)
+	  N->sgx_type = 1;
+  else
+	  N->sgx_type = 2;
   CSEMap.InsertNode(N, IP);
   InsertNode(N);
   return SDValue(N, 0);
@@ -5195,8 +5200,8 @@ SDValue SelectionDAG::getStore(SDValue Chain, const SDLoc &dl, SDValue Val,
         "Invalid chain type");
   EVT VT = Val.getValueType();
   SDVTList VTs = getVTList(MVT::Other);
-  SDValue Undef = getUNDEF(Ptr.getValueType());
-  SDValue Ops[] = { Chain, Val, Ptr, Undef };
+  SDValue Undef = getUNDEF(Ptr.getValueType());	
+  SDValue Ops[] = { Chain, Val, Ptr, Undef};
   FoldingSetNodeID ID;
   AddNodeIDNode(ID, ISD::STORE, VTs, Ops);
   ID.AddInteger(VT.getRawBits());
@@ -5211,7 +5216,10 @@ SDValue SelectionDAG::getStore(SDValue Chain, const SDLoc &dl, SDValue Val,
   auto *N = newSDNode<StoreSDNode>(dl.getIROrder(), dl.getDebugLoc(), VTs,
                                    ISD::UNINDEXED, false, VT, MMO);
   createOperands(N, Ops);
-
+  if (MMO->getFlags() & MachineMemOperand::MOTargetFlag1)
+	  N->sgx_type = 1;
+  else
+	  N->sgx_type = 2;
   CSEMap.InsertNode(N, IP);
   InsertNode(N);
   return SDValue(N, 0);
