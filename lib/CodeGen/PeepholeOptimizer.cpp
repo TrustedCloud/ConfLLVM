@@ -1645,6 +1645,7 @@ bool PeepholeOptimizer::runOnMachineFunction(MachineFunction &MF) {
               LocalMIs.erase(MI);
               LocalMIs.erase(DefMI);
               LocalMIs.insert(FoldMI);
+			  FoldMI->sgx_type = DefMI->sgx_type;
               MI->eraseFromParent();
               DefMI->eraseFromParent();
               MRI->markUsesInDebugValueAsUndef(FoldedReg);

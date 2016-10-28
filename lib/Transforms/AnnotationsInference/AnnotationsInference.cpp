@@ -81,13 +81,16 @@ namespace {
 				Type *ty = glob_var->getType();
 				MDNode *md_node = glob_var->getMetadata("sgx_type");
 				int index = 0;
-				glob_var->dump();
+		
 				std::string var_name = "@"+glob_var->getName().str();
 				int depth = 0;
 				while (1) {
 					variables.insert(std::pair<std::string, z3::expr>(var_name, func_context.bool_const(var_name.c_str())));
 					std::string type;
-					type = dyn_cast<MDString>(md_node->getOperand(index).get())->getString();
+					if (md_node)
+						type = dyn_cast<MDString>(md_node->getOperand(index).get())->getString();
+					else
+						type = "public";
 					index++;
 					if (type.compare("public") == 0) {
 						z3::expr condition = variables.find(var_name)->second == false_const;
@@ -224,8 +227,11 @@ namespace {
 						if (isa<GlobalVariable>(I.getOperand(0))) {
 							arg_name = "@" + arg_name;
 						}
-						insert_implies(arg_name, var_name, 1, 0, variables, variables_depth, func_solver);
-						insert_implies_only(arg_name, var_name, 0, 0, variables, variables_depth, func_solver);
+						if (arg_name.compare("")) {
+							insert_implies(arg_name, var_name, 1, 0, variables, variables_depth, func_solver);
+							insert_implies_only(arg_name, var_name, 0, 0, variables, variables_depth, func_solver);
+						}
+						
 					}
 					else if (I.getOpcode() == Instruction::Store) {
 						std::string arg1_name = I.getOperand(0)->getName().str();
@@ -236,8 +242,10 @@ namespace {
 						if (isa<GlobalVariable>(I.getOperand(1))) {
 							arg2_name = "@" + arg2_name;
 						}
-						if (arg1_name.compare(""))
+						if (arg1_name.compare("")) {
 							insert_implies(arg1_name, arg2_name, 0, 1, variables, variables_depth, func_solver);
+							insert_implies_only(arg2_name, arg2_name, 0, 1, variables, variables_depth, func_solver);
+						}				
 					}
 					else if (BinaryOperator *BO = dyn_cast<BinaryOperator>(Ii)) {
 						std::string arg1_name = BO->getOperand(0)->getName().str();
@@ -249,6 +257,21 @@ namespace {
 							arg2_name = "@" + arg2_name;
 						}
 						std::string var_name = BO->getName().str();
+						if (arg1_name.compare(""))
+							insert_implies(arg1_name, var_name, 0, 0, variables, variables_depth, func_solver);
+						if (arg2_name.compare(""))
+							insert_implies(arg2_name, var_name, 0, 0, variables, variables_depth, func_solver);
+					}
+					else if (CmpInst *CI = dyn_cast<CmpInst>(Ii)) {
+						std::string arg1_name = CI->getOperand(0)->getName().str();
+						if (isa<GlobalVariable>(I.getOperand(0))) {
+							arg1_name = "@" + arg1_name;
+						}
+						std::string arg2_name = CI->getOperand(1)->getName().str();
+						if (isa<GlobalVariable>(I.getOperand(1))) {
+							arg2_name = "@" + arg2_name;
+						}
+						std::string var_name = CI->getName().str();
 						if (arg1_name.compare(""))
 							insert_implies(arg1_name, var_name, 0, 0, variables, variables_depth, func_solver);
 						if (arg2_name.compare(""))
@@ -271,6 +294,21 @@ namespace {
 						int index = 0;
 						std::string type;
 						MDNode *func_md = TF->getMetadata("sgx_type");
+						MDNode *func_ret_node = TF->getMetadata("sgx_return_type");
+
+						if (func_md == NULL) {
+							std::string func_name = TF->getName().str();
+							NamedMDNode *md = module->getNamedMetadata("func_sgx_type");
+							for (unsigned int i = 0; i < md->getNumOperands(); i++) {
+								MDNode *s_md = md->getOperand(i);
+								std::string  s_name = dyn_cast<MDString>(s_md->getOperand(0).get())->getString().str();
+								if (s_name.compare(func_name) == 0) {
+									func_md = dyn_cast<MDNode>(s_md->getOperand(1).get());
+									func_ret_node = dyn_cast<MDNode>(s_md->getOperand(2).get());
+									break;
+								}
+							}
+						}
 						for (CallInst::op_iterator Oi = CI->arg_begin(); Oi != CI->arg_end(); Oi++) {
 							std::string op_name = (*Oi)->getName();
 							if (isa<GlobalVariable>(*Oi)) {
@@ -308,8 +346,10 @@ namespace {
 							}
 							index++;
 						}
-						MDNode *func_ret_node = TF->getMetadata("sgx_return_type");
+						
 						std::string ret_name = CI->getName();
+						if (ret_name.compare("") == 0)
+							continue;
 						if (isa<GlobalVariable>(CI)) {
 							ret_name = "@" + ret_name;
 						}
@@ -348,6 +388,17 @@ namespace {
 						}
 						
 						if (GI->getNumIndices() == 2 && ty->getPointerElementType()->isStructTy()) {
+
+
+							if (GI->getOperand(1)->getName().str().compare("") != 0) {
+								
+								std::string arg1_name = GI->getOperand(1)->getName().str();
+								if (isa<GlobalVariable>(GI->getOperand(1))) {
+									arg1_name = "@" + arg1_name;
+								}
+								std::string var_name = GI->getName().str();
+								insert_implies(arg1_name, var_name, 0, 0, variables, variables_depth, func_solver);
+							}
 							std::string struct_name = ty->getPointerElementType()->getStructName().str();
 							z3::expr condition = variables.find(result)->second == variables.find(param)->second;
 							func_solver.add(condition);
@@ -357,8 +408,7 @@ namespace {
 							result = result + "$p";
 							param = param + "$p";
 
-							if (res_depth > 2) {
-								
+							if (res_depth > 2) {	
 								Module* module = GI->getModule();
 								NamedMDNode *md = module->getNamedMetadata("struct_sgx_type");
 								MDNode *struct_md;
@@ -391,6 +441,46 @@ namespace {
 						else if (GI->getNumIndices() == 1) {
 							z3::expr condition = variables.find(result)->second == variables.find(param)->second;
 							insert_implies(param, result, 0, 0, variables, variables_depth, func_solver);
+							if (GI->getOperand(1)->getName().str().compare("") != 0) {
+								
+								std::string arg1_name = GI->getOperand(1)->getName().str();
+								if (isa<GlobalVariable>(GI->getOperand(1))) {
+									arg1_name = "@" + arg1_name;
+								}
+								std::string var_name = GI->getName().str();
+								insert_implies(arg1_name, var_name, 0, 0, variables, variables_depth, func_solver);
+							}
+						}
+					}
+					else if (dyn_cast<AllocaInst>(Ii) != NULL) {
+					}
+					else if (dyn_cast<UnaryInstruction>(Ii)!=NULL) {
+						UnaryInstruction *UI = dyn_cast<UnaryInstruction>(Ii);
+						std::string arg1_name = UI->getOperand(0)->getName().str();
+						if (isa<GlobalVariable>(I.getOperand(0))) {
+							arg1_name = "@" + arg1_name;
+						}
+						std::string var_name = UI->getName().str();
+						if (arg1_name.compare(""))
+							insert_implies(arg1_name, var_name, 0, 0, variables, variables_depth, func_solver);
+					}
+					else if (PHINode* PI = dyn_cast<PHINode>(Ii)) {
+						
+						std::string var_name = PI->getName().str();
+						for (unsigned int i = 0; i < PI->getNumIncomingValues(); i++) {
+							Value *incoming = PI->getIncomingValue(i);
+							std::string incoming_name = incoming->getName().str();
+							if (isa<GlobalVariable>(incoming)) {
+								incoming_name = "@" + incoming_name;
+							}
+							if(incoming_name.compare(""))
+								insert_implies(incoming_name, var_name, 0, 0, variables, variables_depth, func_solver);
+						}
+					}
+					else {
+						if (I.getName().compare("")) {
+							errs() << "No inference for :";
+							Ii->dump();
 						}
 					}
 				}

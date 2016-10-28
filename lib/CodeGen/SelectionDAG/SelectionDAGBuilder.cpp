@@ -3391,8 +3391,36 @@ bool getSgxType(const Value *PtrV) {
 	bool sgx_type;
 	if (const Instruction *PI = dyn_cast<Instruction>(PtrV)) {
 		MDNode *ptr_md_node = PI->getMetadata("sgx_type");
+		if (ptr_md_node == NULL) {
+			if (const BitCastInst *BI = dyn_cast<BitCastInst>(PI)) {
+				return getSgxType(BI->getOperand(0));
+			}
+			else if (const PtrToIntInst *PII = dyn_cast<PtrToIntInst>(PI)) {
+				return getSgxType(PII->getOperand(0));
+			}
+			else if (const IntToPtrInst *PII = dyn_cast<IntToPtrInst>(PI)) {
+				return getSgxType(PII->getOperand(0));
+			}
+			else if (const GetElementPtrInst *GI = dyn_cast<GetElementPtrInst>(PI)) {
+				if (GI->getNumIndices() == 1) {
+					return getSgxType(GI->getOperand(1));
+				}
+			}
+			else if (const BinaryOperator *BI = dyn_cast<BinaryOperator>(PI)) {
+				return getSgxType(BI->getOperand(0)) || getSgxType(BI->getOperand(1));
+			}
+			else if (const PHINode *PHI = dyn_cast<PHINode>(PI)) {
+				bool val = false;
+				for (unsigned int i = 0; i < PHI->getNumIncomingValues(); i++) {
+					const Value *incoming = PHI->getIncomingValue(i);
+					val = val || getSgxType(incoming);
+				}
+				return val;
+			}
+		}
 		if (!ptr_md_node) {
-			errs() << "No MD found!\n";
+			errs() << "No MD found\n";
+			PI->dump();
 			sgx_type = false;
 		}
 		else {
@@ -3403,7 +3431,8 @@ bool getSgxType(const Value *PtrV) {
 	else if (const Argument *AI = dyn_cast<Argument>(PtrV)) {
 		MDNode *func_md = AI->getParent()->getMetadata("sgx_type");
 		if (!func_md) {
-			errs() << "No MDD found!\n";
+			errs() << "No MD found!\n";
+			AI->dump();
 			sgx_type = false;
 		}
 		else {
@@ -3416,6 +3445,7 @@ bool getSgxType(const Value *PtrV) {
 		MDNode *ptr_md_node = AI->getMetadata("sgx_type");
 		if (!ptr_md_node) {
 			errs() << "No MD found!\n";
+			AI->dump();
 			sgx_type = false;
 		}
 		else {
@@ -5840,11 +5870,28 @@ void SelectionDAGBuilder::LowerCallTo(ImmutableCallSite CS, SDValue Callee,
 
   const Function *CF = CS.getCalledFunction();
   int index = 0;
+  
+  MDNode *func_md = CF->getMetadata("sgx_type");
+  MDNode *func_ret_md = CF->getMetadata("sgx_return_type");
+  if (func_md == NULL) {
+	  std::string func_name = CF->getName().str();
+	  NamedMDNode *md = CF->getParent()->getNamedMetadata("func_sgx_type");
+	  for (unsigned int i = 0; i < md->getNumOperands(); i++) {
+		  MDNode *s_md = md->getOperand(i);
+		  std::string  s_name = dyn_cast<MDString>(s_md->getOperand(0).get())->getString().str();
+		  if (s_name.compare(func_name) == 0) {
+			  func_md = dyn_cast<MDNode>(s_md->getOperand(1).get());
+			  func_ret_md = dyn_cast<MDNode>(s_md->getOperand(2).get());
+			  break;
+		  }
+	  }
+  }
 
   for (ImmutableCallSite::arg_iterator i = CS.arg_begin(), e = CS.arg_end();
        i != e; ++i) {
     const Value *V = *i;
-	MDNode *md_node = dyn_cast<MDNode>(CF->getMetadata("sgx_type")->getOperand(index).get());
+	
+	MDNode *md_node = dyn_cast<MDNode>(func_md->getOperand(index).get());
 	std::string sgx_type_string = dyn_cast<MDString>(md_node->getOperand(0).get())->getString().str();
 	if (sgx_type_string.compare("private") == 0)
 		Entry.sgx_type = true;
@@ -5891,14 +5938,16 @@ void SelectionDAGBuilder::LowerCallTo(ImmutableCallSite CS, SDValue Callee,
       .setTailCall(isTailCall)
       .setConvergent(CS.isConvergent());
   std::pair<SDValue, SDValue> Result = lowerInvokable(CLI, EHPadBB);
+  if (Result.first.getNode()) {
+	  MDString *md_node = dyn_cast<MDString>(func_ret_md->getOperand(0).get());
+	  std::string sgx_type_string = md_node->getString().str();
+	  if (sgx_type_string.compare("private") == 0)
+		  Result.first->register_sgx_type = 1;
+	  else
+		  Result.first->register_sgx_type = 2;
+  }
 
-
-  MDString *md_node = dyn_cast<MDString>(CF->getMetadata("sgx_return_type")->getOperand(0).get());
-  std::string sgx_type_string = md_node->getString().str();
-  if (sgx_type_string.compare("private") == 0)
-	  Result.first->register_sgx_type = 1;
-  else
-	  Result.first->register_sgx_type = 2;
+  
 
   if (Result.first.getNode()) {
     const Instruction *Inst = CS.getInstruction();
@@ -8111,7 +8160,7 @@ void SelectionDAGISel::LowerArguments(const Function &F) {
 		bool sgx_type = false;
 		MDNode *func_md = F.getMetadata("sgx_type");
 		if (!func_md) {
-			errs() << "No MDD found!\n";
+			errs() << "No MD found!\n";
 			sgx_type = false;
 		}
 		else {

@@ -622,9 +622,17 @@ void MCObjectFileInfo::initCOFFMCObjectFileInfo(const Triple &T) {
           COFF::IMAGE_SCN_MEM_READ,
       SectionKind::getText());
   DataSection = Ctx->getCOFFSection(
-      ".data", COFF::IMAGE_SCN_CNT_INITIALIZED_DATA | COFF::IMAGE_SCN_MEM_READ |
+      ".data_globals", COFF::IMAGE_SCN_CNT_INITIALIZED_DATA | COFF::IMAGE_SCN_MEM_READ |
                    COFF::IMAGE_SCN_MEM_WRITE,
       SectionKind::getData());
+
+  GlobalsRelocatedPrivate = Ctx->getCOFFSection("sgxg_pri", COFF::IMAGE_SCN_CNT_INITIALIZED_DATA | COFF::IMAGE_SCN_MEM_READ |
+	  COFF::IMAGE_SCN_MEM_WRITE,
+	  SectionKind::getData());
+  GlobalsRelocatedPublic = Ctx->getCOFFSection("sgxg_pub", COFF::IMAGE_SCN_CNT_INITIALIZED_DATA | COFF::IMAGE_SCN_MEM_READ |
+	  COFF::IMAGE_SCN_MEM_WRITE,
+	  SectionKind::getData());
+
   ReadOnlySection = Ctx->getCOFFSection(
       ".rdata", COFF::IMAGE_SCN_CNT_INITIALIZED_DATA | COFF::IMAGE_SCN_MEM_READ,
       SectionKind::getReadOnly());

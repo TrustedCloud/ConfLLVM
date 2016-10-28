@@ -48,7 +48,8 @@
 
 using namespace llvm;
 
-cl::opt<int> SgxStackSize("sgx-stack-size", cl::desc("Stack size for sgx stacks"), cl::value_desc("stack size"));
+//cl::opt<int> SgxStackSize("sgx-stack-size", cl::desc("Stack size for sgx stacks"), cl::value_desc("stack size"));
+int SgxStackSize = 0x10000000;
 cl::opt<bool> NonMpxChecks("non-mpx-checks", cl::desc("Generate non mpx checks(less effecient)"), cl::value_desc("bool"));
 	
 namespace {
@@ -1271,13 +1272,10 @@ int getMemLocation(const MachineInstr *MI) {
 void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
   X86MCInstLower MCInstLowering(*MF, *this);
   const X86RegisterInfo *RI = MF->getSubtarget<X86Subtarget>().getRegisterInfo();
-  if (MI->hasOneMemOperand()) {
+  if (!MI->memoperands_empty()) {
 	  std::string sgx_type;
 	  unsigned bnd_reg;
 	  int address_offset = 0;
-
-
-
 	  int index = getMemLocation(MI);
 	  if (index == -1) {
 		  llvm_unreachable("Cant find position of mem operand!");
@@ -1289,6 +1287,7 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
 		  if (MI->getOperand(0 + index).getReg() == X86::RSP || MI->getOperand(0 + index).getReg() == X86::ESP || MI->getOperand(0 + index).getReg() == X86::EBP || MI->getOperand(0 + index).getReg() == X86::RBP) {
 			  address_offset = -SgxStackSize;
 		  }
+		  errs() << "Address offset=" << address_offset<<" "<< SgxStackSize << "\n";
 	  }
 	  else if (MI->sgx_type == 2) {
 		  sgx_type = "public";
@@ -1333,9 +1332,7 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
 		  OutStreamer->EmitInstruction(MIB_U, getSubtargetInfo());
 	  }
 	  else {
-		  OutStreamer->EmitInstruction(MCInstBuilder(X86::PUSH32r).addReg(X86::EAX), getSubtargetInfo());
-		  MCInstBuilder MIB = MCInstBuilder(X86::LEA32r).addReg(X86::EAX);
-
+		  MCInstBuilder MIB = MCInstBuilder(X86::LEA64r).addReg(X86::R15);
 		  MIB.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(0 + index)).getValue());	 
 		  MIB.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(1 + index)).getValue());
 		  MIB.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(2 + index)).getValue());	 
@@ -1354,10 +1351,10 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
 		  }
 		  MIB.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(4 + index)).getValue());
 		  OutStreamer->EmitInstruction(MIB, getSubtargetInfo());
-		  OutStreamer->EmitRawText("\tcalll\t__sgx_"+sgx_type+"_check_routine");
-		  OutStreamer->EmitInstruction(MCInstBuilder(X86::POP32r).addReg(X86::EAX), getSubtargetInfo());
+		  OutStreamer->EmitRawText("\tcallq\t__sgx_"+sgx_type+"_check_routine");
 	  }
   }
+  
 
   switch (MI->getOpcode()) {
   case TargetOpcode::DBG_VALUE:

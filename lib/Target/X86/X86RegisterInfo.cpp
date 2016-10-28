@@ -525,7 +525,9 @@ BitVector X86RegisterInfo::getReservedRegs(const MachineFunction &MF) const {
         Reserved.set(*AI);
     }
   }
-
+  for (MCSubRegIterator I(X86::R15, this, /*IncludeSelf=*/true); I.isValid();
+	  ++I)
+	  Reserved.set(*I);
   return Reserved;
 }
 

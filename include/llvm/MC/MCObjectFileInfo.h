@@ -55,6 +55,9 @@ protected:
 
   /// Section directive for standard data.
   MCSection *DataSection;
+  
+  MCSection *GlobalsRelocatedPrivate;
+  MCSection *GlobalsRelocatedPublic;
 
   /// Section that is default initialized to zero.
   MCSection *BSSSection;

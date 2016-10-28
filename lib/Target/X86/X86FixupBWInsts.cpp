@@ -317,7 +317,8 @@ MachineInstr *FixupBWInstPass::tryReplaceInstr(
     // nothing to do here.
     break;
   }
-
+  if(NewMI)
+	NewMI->sgx_type = MI->sgx_type;
   return NewMI;
 }
 

@@ -937,6 +937,7 @@ MCSection *TargetLoweringObjectFileCOFF::SelectSectionForGlobal(
     EmitUniquedSection = TM.getDataSections();
 
   if ((EmitUniquedSection && !Kind.isCommon()) || GV->hasComdat()) {
+	  return GlobalsRelocatedPublic;
     const char *Name = getCOFFSectionNameForUniqueGlobal(Kind);
     unsigned Characteristics = getCOFFSectionFlags(Kind, TM);
 
@@ -969,6 +970,22 @@ MCSection *TargetLoweringObjectFileCOFF::SelectSectionForGlobal(
 
   if (Kind.isText())
     return TextSection;
+  
+  
+  const GlobalVariable *GVar = dyn_cast<GlobalVariable>(GV);
+  if (GVar) {
+	  MDNode *md_node = GVar->getMetadata("sgx_type");
+	  std::string type = dyn_cast<MDString>(md_node->getOperand(1).get())->getString();
+	  if (type.compare("public") == 0)
+		  return GlobalsRelocatedPublic;
+	  else
+		  return GlobalsRelocatedPrivate;
+  }
+  else {
+	  return GlobalsRelocatedPublic;
+  }
+
+
 
   if (Kind.isThreadLocal())
     return TLSDataSection;
