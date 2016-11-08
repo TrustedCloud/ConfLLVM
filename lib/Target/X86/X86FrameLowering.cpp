@@ -255,6 +255,16 @@ void X86FrameLowering::emitSPUpdate(MachineBasicBlock &MBB,
 
   uint64_t Chunk = (1LL << 31) - 1;
   DebugLoc DL = MBB.findDebugLoc(MBBI);
+  
+  if (Offset == 0) {
+	  MachineInstrBuilder MI = BuildMI(MBB, MBBI, DL, TII.get(X86::SUB64ri8), StackPtr)
+		  .addReg(StackPtr)
+		  .addImm(0);
+	  if (!InEpilogue)
+		  MI.setMIFlag(MachineInstr::FrameSetup);
+	  else
+		  MI.setMIFlag(MachineInstr::FrameDestroy);
+  }
 
   while (Offset) {
     if (Offset > Chunk) {
@@ -284,7 +294,8 @@ void X86FrameLowering::emitSPUpdate(MachineBasicBlock &MBB,
     }
 
     uint64_t ThisVal = std::min(Offset, Chunk);
-    if (ThisVal == (Is64Bit ? 8 : 4)) {
+	//Disabling the Push pop optmization
+    if (ThisVal == (Is64Bit ? 8 : 4) && false) {
       // Use push / pop instead.
       unsigned Reg = isSub
         ? (unsigned)(Is64Bit ? X86::RAX : X86::EAX)
@@ -1203,8 +1214,8 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
       MI->setFlag(MachineInstr::FrameSetup);
       MBB.insert(MBBI, MI);
     }
-  } else if (NumBytes) {
-    emitSPUpdate(MBB, MBBI, -(int64_t)NumBytes, /*InEpilogue=*/false);
+  } else if ((NumBytes || true)) {
+    emitSPUpdate(MBB, MBBI, -(int64_t)(NumBytes), /*InEpilogue=*/false);
   }
 
   if (NeedsWinCFI && NumBytes)
@@ -1614,7 +1625,7 @@ void X86FrameLowering::emitEpilogue(MachineFunction &MF,
         .addReg(FramePtr);
       --MBBI;
     }
-  } else if (NumBytes) {
+  } else if (NumBytes || true) {
     // Adjust stack pointer back: ESP += numbytes.
     emitSPUpdate(MBB, MBBI, NumBytes, /*InEpilogue=*/true);
     --MBBI;
