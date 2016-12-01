@@ -906,7 +906,10 @@ void InlineSpiller::spillAroundUses(unsigned Reg) {
        RegI != E; ) {
     MachineInstr *MI = &*(RegI++);
 	if (isDefOf(MI, Reg)) {
-		realized_sgx_type = inferMIRRegisterType(MI, Reg);
+		std::set<std::pair<const MachineInstr*, unsigned int>> accessed_mirs;
+		realized_sgx_type = inferMIRRegisterType(MI, Reg, accessed_mirs);
+		if (realized_sgx_type == -1)
+			llvm_unreachable("MIR Inference reached top and not in live ins");
 	}
     // Debug values are not allowed to affect codegen.
     if (MI->isDebugValue()) {

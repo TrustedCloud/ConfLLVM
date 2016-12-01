@@ -45,6 +45,7 @@
 #include "llvm/Support/ELF.h"
 #include "llvm/Target/TargetLoweringObjectFile.h"
 #include <sstream>
+#include "llvm/Transforms/AnnotationsInference.h"
 
 using namespace llvm;
 
@@ -1270,10 +1271,11 @@ int getMemLocation(const MachineInstr *MI) {
 	return -1;
 }
 
-	
+
+
 void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
   
-
+	X86::RAX;
 
   X86MCInstLower MCInstLowering(*MF, *this);
   const X86RegisterInfo *RI = MF->getSubtarget<X86Subtarget>().getRegisterInfo();
@@ -1380,13 +1382,51 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
 	  s = s+ ", %rsp";
 	  OutStreamer->EmitRawText(s);
   }
+
+  
   if (MI->getOpcode() == X86::CALL64r) {
 	  OutStreamer->EmitRawText("\tmovabsq\t%rax, 0x900000010");
+	  std::set<std::pair<const MachineInstr*, unsigned int>> accessed_mirs;
+	 // llvm::errs() << "Starting new inference on RCX\n";
+	  //errs() << MI->getParent()->getParent()->getName().str() << "\n";
+	  //errs() << "Getting RCX\n";
+	 // OutStreamer->EmitRawText("#taint here for rcx - " + std::to_string(inferMIRRegisterType(MI->getPrevNode(), X86::RCX, accessed_mirs)));
+	  //errs() << "Getting RDX\n";
+	 // OutStreamer->EmitRawText("#taint here for rdx - " + std::to_string(inferMIRRegisterType(MI->getPrevNode(), X86::RDX, accessed_mirs)));
+	  //errs() << "Getting R8 = " << X86::R8 << "\n" ;
+	 // OutStreamer->EmitRawText("#taint here for r8 - " + std::to_string(inferMIRRegisterType(MI->getPrevNode(), X86::R8, accessed_mirs)));
+	  //errs() << "Getting R9\n";
+	 // OutStreamer->EmitRawText("#taint here for r9 - " + std::to_string(inferMIRRegisterType(MI->getPrevNode(), X86::R9, accessed_mirs)));
+	  
+	  
+	  MCInstBuilder MIB = MCInstBuilder(X86::MOV64rr).addReg(X86::RAX).addReg(MI->getOperand(0).getReg());
+	  OutStreamer->EmitInstruction(MIB, getSubtargetInfo());
+	  unsigned registers_to_check[] = { X86::R9, X86::R8, X86::RDX, X86::RCX };
+	  for (int i = 0; i < 4; i++) {
+		  //if(i==3)
+		//	  errs() << "Starting for RCX\n";
+		  int taint = inferMIRRegisterType(MI->getPrevNode(), registers_to_check[i], accessed_mirs);
+		 // if (i == 3)
+			//  errs() << "GOt = " << taint << "\n";
+		  if (taint == -1 || taint == 1) {
+			  OutStreamer->EmitRawText("\tcmpb\t$1, " + std::to_string(-1 - i) + "(%rax)");
+			  OutStreamer->EmitRawText("\tjne\t__function_call_error1");
+		  }
+	  }
+	  
+	  assert((MI->register_sgx_type == 1 || MI->register_sgx_type == 2));
+	  
+	  if (MI->register_sgx_type == 2) {
+		  OutStreamer->EmitRawText("\tcmpb\t$2, -5(%rax)");
+		  OutStreamer->EmitRawText("\tjne\t__function_call_error1");
+	  }
+
 	  OutStreamer->EmitRawText("\tmovq\t%rsp, %rax");
 	  OutStreamer->EmitRawText("\tmovabsq\t%rax, 0x900000038");
 	  OutStreamer->EmitRawText("\tmovabsq\t0x900000030, %rax");
 	  OutStreamer->EmitRawText("\tmovq\t%rax, %rsp");
 	  OutStreamer->EmitRawText("\tmovabsq\t0x900000010, %rax");
+
   }
 
   switch (MI->getOpcode()) {

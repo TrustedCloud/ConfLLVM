@@ -574,7 +574,7 @@ void AsmPrinter::EmitFunctionHeader() {
   // Emit the CurrentFnSym.  This is a virtual function to allow targets to
   // do their wild and crazy things as required.
   EmitFunctionEntryLabel();
-
+  OutStreamer->EmitRawText("#function starts here - " + CurrentFnSym->getName().str());
   // If the function had address-taken blocks that got deleted, then we have
   // references to the dangling symbols.  Emit them at the start of the function
   // so that we don't get references to undefined symbols.

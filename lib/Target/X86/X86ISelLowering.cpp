@@ -2456,7 +2456,7 @@ X86TargetLowering::LowerMemArgument(SDValue Chain, CallingConv::ID CallConv,
 
 
 
-	errs() << "I = " << i << "\n";
+	//errs() << "I = " << i << "\n";
 	bool sgx_type = Ins[i].sgx_type;
   auto MMOFlags = MachineMemOperand::MONone;
   if (sgx_type)
@@ -2670,8 +2670,9 @@ SDValue X86TargetLowering::LowerFormalArguments(
 	  else
 		  sgx_type = 2;
 	  ArgValue->getOperand(1)->sgx_type = sgx_type;
-	  MF.live_in_types.push_back(sgx_type);
-
+	  //MF.live_in_types.push_back(sgx_type);
+	  int lReg = VA.getLocReg();
+	  MF.live_in_types[lReg] = sgx_type;
       // If this is an 8 or 16-bit value, it is really passed promoted to 32
       // bits.  Insert an assert[sz]ext to capture this, then truncate to the
       // right size.
@@ -3418,8 +3419,17 @@ X86TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
     MF.getFrameInfo().setHasTailCall();
     return DAG.getNode(X86ISD::TC_RETURN, dl, NodeTys, Ops);
   }
-
+  ImmutableCallSite *CS = CLI.CS;
+  const Instruction *CF = CS->getInstruction();
+  MDNode *func_ret_md = CF->getMetadata("sgx_call_return_type");
   Chain = DAG.getNode(X86ISD::CALL, dl, NodeTys, Ops);
+  MDString *md_node = dyn_cast<MDString>(func_ret_md->getOperand(0).get());
+  std::string sgx_type_string = md_node->getString().str();
+  if (sgx_type_string.compare("private") == 0)
+	  Chain->register_sgx_type = 1;
+  else
+	  Chain->register_sgx_type = 2;
+
   InFlag = Chain.getValue(1);
 
   // Create the CALLSEQ_END node.

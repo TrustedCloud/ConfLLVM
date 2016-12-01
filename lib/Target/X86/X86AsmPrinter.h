@@ -136,6 +136,8 @@ public:
 
   void EmitInstruction(const MachineInstr *MI) override;
 
+  void EmitFunctionEntryLabel() override;
+  
   void EmitBasicBlockEnd(const MachineBasicBlock &MBB) override {
     SMShadowTracker.emitShadowPadding(*OutStreamer, getSubtargetInfo());
   }

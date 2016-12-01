@@ -12,6 +12,8 @@
 #include "llvm/IR/Constants.h"
 using namespace llvm;
 
+#define SKIP_DEBUG(x) 
+
 namespace {
 	struct AnnotationsInference : public FunctionPass {
 		static char ID;
@@ -60,6 +62,14 @@ namespace {
 			//errs() << "Inserted condition : " << LHS_name << " => " << RHS_name << "\n";
 			return;
 		}
+		Value * opActual(Value* V) {
+			if (ConstantExpr *CE = dyn_cast<ConstantExpr>(V)) {
+				return opActual(CE->getOperand(0));
+			}
+			else {
+				return V;
+			}
+		}
 		bool runOnFunction(Function &F) override {
 			//errs() << "Inferring annotations for : " << F.getName() << "\n";
 			z3::context func_context;
@@ -74,6 +84,15 @@ namespace {
 
 
 			Module* module = F.getParent();
+
+			Module::FunctionListType& functions = module->getFunctionList();
+			for (auto func_var = functions.begin(); func_var != functions.end(); func_var++) {
+				std::string var_name = "@" + func_var->getName().str();
+				variables.insert(std::pair<std::string, z3::expr>(var_name, func_context.bool_const(var_name.c_str())));
+				z3::expr condition = variables.find(var_name)->second == false_const;
+				func_solver.add(condition);
+				variables_depth[var_name] = 1;
+			}
 
 			Module::GlobalListType& globals = module->getGlobalList();
 			for (auto glob_var = globals.begin(); glob_var != globals.end(); glob_var++) {
@@ -215,6 +234,7 @@ namespace {
 						variables.insert(std::pair<std::string, z3::expr>(var_name, func_context.bool_const(var_name.c_str())));
 						variables_depth[I.getName().str()] = depth;
 					}
+					
 				}
 			}
 			for (Function::iterator BBi = F.begin(); BBi != F.end(); BBi++) {
@@ -223,78 +243,113 @@ namespace {
 					Instruction &I = *Ii;
 					if (I.getOpcode() == Instruction::Load) {
 						std::string var_name = I.getName().str();
-						std::string arg_name = I.getOperand(0)->getName().str();
-						if (isa<GlobalVariable>(I.getOperand(0))) {
+						std::string arg_name = opActual(I.getOperand(0))->getName().str();
+						if (isa<GlobalObject>(opActual(I.getOperand(0)))) {
 							arg_name = "@" + arg_name;
 						}
 						if (arg_name.compare("")) {
 							insert_implies(arg_name, var_name, 1, 0, variables, variables_depth, func_solver);
 							insert_implies_only(arg_name, var_name, 0, 0, variables, variables_depth, func_solver);
 						}
+						else {
+							SKIP_DEBUG(errs() << "Skipping ";
+							opActual(I.getOperand(0))->dump();)
+						}
 						
 					}
 					else if (I.getOpcode() == Instruction::Store) {
-						std::string arg1_name = I.getOperand(0)->getName().str();
-						if (isa<GlobalVariable>(I.getOperand(0))) {
+						std::string arg1_name = opActual(I.getOperand(0))->getName().str();
+						if (isa<GlobalObject>(opActual(I.getOperand(0)))) {
 							arg1_name = "@" + arg1_name;
 						}
-						std::string arg2_name = I.getOperand(1)->getName().str();
-						if (isa<GlobalVariable>(I.getOperand(1))) {
+						std::string arg2_name = opActual(I.getOperand(1))->getName().str();
+						if (isa<GlobalObject>(opActual(I.getOperand(1)))) {
 							arg2_name = "@" + arg2_name;
 						}
 						if (arg1_name.compare("")) {
 							insert_implies(arg1_name, arg2_name, 0, 1, variables, variables_depth, func_solver);
 							insert_implies_only(arg2_name, arg2_name, 0, 1, variables, variables_depth, func_solver);
-						}				
+						}
+						else {
+							SKIP_DEBUG(errs() << "Skipping ";
+							opActual(I.getOperand(0))->dump();)
+						}
 					}
 					else if (BinaryOperator *BO = dyn_cast<BinaryOperator>(Ii)) {
-						std::string arg1_name = BO->getOperand(0)->getName().str();
-						if (isa<GlobalVariable>(I.getOperand(0))) {
+						std::string arg1_name = opActual(BO->getOperand(0))->getName().str();
+						if (isa<GlobalObject>(opActual(I.getOperand(0)))) {
 							arg1_name = "@" + arg1_name;
 						}
-						std::string arg2_name = BO->getOperand(1)->getName().str();
-						if (isa<GlobalVariable>(I.getOperand(1))) {
+						std::string arg2_name = opActual(BO->getOperand(1))->getName().str();
+						if (isa<GlobalObject>(opActual(I.getOperand(1)))) {
 							arg2_name = "@" + arg2_name;
 						}
 						std::string var_name = BO->getName().str();
 						if (arg1_name.compare(""))
 							insert_implies(arg1_name, var_name, 0, 0, variables, variables_depth, func_solver);
+						else {
+							SKIP_DEBUG(errs() << "Skipping ";
+							opActual(BO->getOperand(0))->dump();)
+						}
 						if (arg2_name.compare(""))
 							insert_implies(arg2_name, var_name, 0, 0, variables, variables_depth, func_solver);
+						else {
+							SKIP_DEBUG(errs() << "Skipping ";
+							opActual(BO->getOperand(1))->dump();)
+						}
 					}
 					else if (CmpInst *CI = dyn_cast<CmpInst>(Ii)) {
-						std::string arg1_name = CI->getOperand(0)->getName().str();
-						if (isa<GlobalVariable>(I.getOperand(0))) {
+						std::string arg1_name = opActual(CI->getOperand(0))->getName().str();
+						if (isa<GlobalObject>(opActual(I.getOperand(0)))) {
 							arg1_name = "@" + arg1_name;
 						}
-						std::string arg2_name = CI->getOperand(1)->getName().str();
-						if (isa<GlobalVariable>(I.getOperand(1))) {
+						std::string arg2_name = opActual(CI->getOperand(1))->getName().str();
+						if (isa<GlobalObject>(opActual(I.getOperand(1)))) {
 							arg2_name = "@" + arg2_name;
 						}
 						std::string var_name = CI->getName().str();
 						if (arg1_name.compare(""))
 							insert_implies(arg1_name, var_name, 0, 0, variables, variables_depth, func_solver);
+						else {
+							SKIP_DEBUG(errs() << "Skipping ";
+							opActual(CI->getOperand(0))->dump();)
+						}
 						if (arg2_name.compare(""))
 							insert_implies(arg2_name, var_name, 0, 0, variables, variables_depth, func_solver);
+						else {
+							SKIP_DEBUG(errs() << "Skipping ";
+							opActual(CI->getOperand(1))->dump();)
+						}
 					}
 					else if (ReturnInst *RO = dyn_cast<ReturnInst>(Ii)) {
 						if (RO->getNumOperands() == 0)
 							continue;
-						std::string arg1_name = RO->getOperand(0)->getName().str();
-						if (isa<GlobalVariable>(I.getOperand(0))) {
+						std::string arg1_name = opActual(RO->getOperand(0))->getName().str();
+						if (isa<GlobalObject>(opActual(I.getOperand(0)))) {
 							arg1_name = "@" + arg1_name;
 						}
 						if (arg1_name.compare(""))
 							insert_implies(arg1_name, "$result", 0, 0, variables, variables_depth, func_solver);
+						else {
+							SKIP_DEBUG(errs() << "Skipping ";
+							opActual(RO->getOperand(0))->dump();)
+						}
 					}
 					else if (CallInst *CI = dyn_cast<CallInst>(Ii)) {
 						Function *TF = CI->getCalledFunction();
-						if (TF == NULL)
-							continue;
+						//if (TF == NULL) {
+						//	llvm::errs() << "Skipping function call!\n";
+						//	continue;
+						//}
+							
+						
+						//TF->dump();
 						int index = 0;
 						std::string type;
-						MDNode *func_md = TF->getMetadata("sgx_type");
-						MDNode *func_ret_node = TF->getMetadata("sgx_return_type");
+						//MDNode *func_md = TF->getMetadata("sgx_type");
+						//MDNode *func_ret_node = TF->getMetadata("sgx_return_type");
+						MDNode *func_md = CI->getMetadata("sgx_call_type");
+						MDNode *func_ret_node = CI->getMetadata("sgx_call_return_type");
 
 						if (func_md == NULL) {
 							std::string func_name = TF->getName().str();
@@ -310,11 +365,14 @@ namespace {
 							}
 						}
 						for (CallInst::op_iterator Oi = CI->arg_begin(); Oi != CI->arg_end(); Oi++) {
-							std::string op_name = (*Oi)->getName();
-							if (isa<GlobalVariable>(*Oi)) {
+							
+							std::string op_name = opActual(*Oi)->getName();
+							if (isa<GlobalObject>(opActual(*Oi))) {
 								op_name = "@" + op_name;
 							}
 							if (op_name.compare("")==0) {
+								SKIP_DEBUG(errs() << "Skipping ";
+								opActual(*Oi)->dump();)
 								index++;
 								continue;
 							}
@@ -350,7 +408,7 @@ namespace {
 						std::string ret_name = CI->getName();
 						if (ret_name.compare("") == 0)
 							continue;
-						if (isa<GlobalVariable>(CI)) {
+						if (isa<GlobalObject>(CI)) {
 							ret_name = "@" + ret_name;
 						}
 						int ret_depth = variables_depth[ret_name];
@@ -380,24 +438,28 @@ namespace {
 						}
 					}
 					else if (GetElementPtrInst *GI = dyn_cast<GetElementPtrInst>(Ii)) {
-						Type *ty = GI->getOperand(0)->getType();
+						Type *ty = opActual(GI->getOperand(0))->getType();
 						std::string result = GI->getName().str();
-						std::string param = GI->getOperand(0)->getName();
-						if (isa<GlobalVariable>(I.getOperand(0))) {
+						std::string param = opActual(GI->getOperand(0))->getName();
+						if (isa<GlobalObject>(opActual(I.getOperand(0)))) {
 							param = "@" + param;
 						}
 						
 						if (GI->getNumIndices() == 2 && ty->getPointerElementType()->isStructTy()) {
 
 
-							if (GI->getOperand(1)->getName().str().compare("") != 0) {
+							if (opActual(GI->getOperand(1))->getName().str().compare("") != 0) {
 								
-								std::string arg1_name = GI->getOperand(1)->getName().str();
-								if (isa<GlobalVariable>(GI->getOperand(1))) {
+								std::string arg1_name = opActual(GI->getOperand(1))->getName().str();
+								if (isa<GlobalObject>(opActual(GI->getOperand(1)))) {
 									arg1_name = "@" + arg1_name;
 								}
 								std::string var_name = GI->getName().str();
 								insert_implies(arg1_name, var_name, 0, 0, variables, variables_depth, func_solver);
+							}
+							else {
+								SKIP_DEBUG(errs() << "Skipping ";
+								opActual(GI->getOperand(1))->dump();)
 							}
 							std::string struct_name = ty->getPointerElementType()->getStructName().str();
 							z3::expr condition = variables.find(result)->second == variables.find(param)->second;
@@ -438,17 +500,39 @@ namespace {
 								}
 							}	
 						}
-						else if (GI->getNumIndices() == 1) {
+						/*else if (GI->getNumIndices() == 1) {
 							z3::expr condition = variables.find(result)->second == variables.find(param)->second;
 							insert_implies(param, result, 0, 0, variables, variables_depth, func_solver);
-							if (GI->getOperand(1)->getName().str().compare("") != 0) {
+							if (opActual(GI->getOperand(1))->getName().str().compare("") != 0) {
 								
-								std::string arg1_name = GI->getOperand(1)->getName().str();
-								if (isa<GlobalVariable>(GI->getOperand(1))) {
+								std::string arg1_name = opActual(GI->getOperand(1))->getName().str();
+								if (isa<GlobalObject>(opActual(GI->getOperand(1)))) {
 									arg1_name = "@" + arg1_name;
 								}
 								std::string var_name = GI->getName().str();
 								insert_implies(arg1_name, var_name, 0, 0, variables, variables_depth, func_solver);
+							}
+							else {
+								errs() << "Skipping ";
+								opActual(GI->getOperand(1))->dump();
+							}
+						}*/
+						else {
+							z3::expr condition = variables.find(result)->second == variables.find(param)->second;
+							insert_implies(param, result, 0, 0, variables, variables_depth, func_solver);
+							for (unsigned int i = 1; i < GI->getNumIndices(); i++) {
+								if (opActual(GI->getOperand(i))->getName().str().compare("") != 0) {
+									std::string arg1_name = opActual(GI->getOperand(1))->getName().str();
+									if (isa<GlobalObject>(opActual(GI->getOperand(1)))) {
+										arg1_name = "@" + arg1_name;
+									}
+									std::string var_name = GI->getName().str();
+									insert_implies(arg1_name, var_name, 0, 0, variables, variables_depth, func_solver);
+								}
+								else {
+									SKIP_DEBUG(errs() << "Skipping ";
+									opActual(GI->getOperand(1))->dump();)
+								}
 							}
 						}
 					}
@@ -456,13 +540,17 @@ namespace {
 					}
 					else if (dyn_cast<UnaryInstruction>(Ii)!=NULL) {
 						UnaryInstruction *UI = dyn_cast<UnaryInstruction>(Ii);
-						std::string arg1_name = UI->getOperand(0)->getName().str();
-						if (isa<GlobalVariable>(I.getOperand(0))) {
+						std::string arg1_name = opActual(UI->getOperand(0))->getName().str();
+						if (isa<GlobalObject>(opActual(I.getOperand(0)))) {
 							arg1_name = "@" + arg1_name;
 						}
 						std::string var_name = UI->getName().str();
 						if (arg1_name.compare(""))
 							insert_implies(arg1_name, var_name, 0, 0, variables, variables_depth, func_solver);
+						else {
+							SKIP_DEBUG(errs() << "Skipping ";
+							opActual(UI->getOperand(0))->dump();)
+						}
 					}
 					else if (PHINode* PI = dyn_cast<PHINode>(Ii)) {
 						
@@ -470,11 +558,15 @@ namespace {
 						for (unsigned int i = 0; i < PI->getNumIncomingValues(); i++) {
 							Value *incoming = PI->getIncomingValue(i);
 							std::string incoming_name = incoming->getName().str();
-							if (isa<GlobalVariable>(incoming)) {
+							if (isa<GlobalObject>(incoming)) {
 								incoming_name = "@" + incoming_name;
 							}
 							if(incoming_name.compare(""))
 								insert_implies(incoming_name, var_name, 0, 0, variables, variables_depth, func_solver);
+							else {
+								SKIP_DEBUG(errs() << "Skipping ";
+								incoming->dump();)
+							}
 						}
 					}
 					else {
@@ -482,6 +574,7 @@ namespace {
 							errs() << "No inference for :";
 							Ii->dump();
 						}
+						
 					}
 				}
 			}
@@ -521,6 +614,7 @@ namespace {
 					I.setMetadata("sgx_type", md_node);
 				}
 			}
+			
 			return false;
 		}
 		virtual void getAnalysisUsage(AnalysisUsage&Info) {

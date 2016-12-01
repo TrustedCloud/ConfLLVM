@@ -650,6 +650,43 @@ void X86AsmPrinter::EmitEndOfAsmFile(Module &M) {
   }
 }
 
+
+void PrintRegisterTaintSignature(unsigned Reg, llvm::MCStreamer *OutStreamer, const llvm::MachineFunction* MF ) {
+
+	const TargetMachine &TM = MF->getTarget();
+	const MCRegisterInfo *MRI = TM.getMCRegisterInfo();
+
+	int act_reg = -1;
+	for (auto reg_iterator = MF->live_in_types.begin(); reg_iterator != MF->live_in_types.end(); reg_iterator++) {
+		if (MRI->isSuperOrSubRegisterEq(reg_iterator->first, Reg))
+			act_reg = reg_iterator->first;
+	}
+	if (act_reg!=-1)
+		OutStreamer->EmitRawText("\t.byte\t0x" + std::to_string(MF->live_in_types.find(act_reg)->second));
+	else
+		OutStreamer->EmitRawText("\t.byte\t0x1");
+}
+
+void X86AsmPrinter::EmitFunctionEntryLabel() {
+	OutStreamer->EmitRawText(CurrentFnSym->getName().str() + ".function_magic:");
+	OutStreamer->EmitRawText("\t.quad\t0x0123456789ABCDEF");
+	OutStreamer->EmitRawText("\t.quad\t0xFEDCBA9876543210");
+	//taint for rcd,rdx,r8,r9
+	MDNode *md_ret = MF->getFunction()->getMetadata("sgx_return_type");
+	MDString *return_type_string = dyn_cast<MDString>(md_ret->getOperand(0).get());
+	assert(return_type_string);
+	if (return_type_string->getString().str().compare("private") == 0) {
+		OutStreamer->EmitRawText("\t.byte\t0x1");
+	}
+	else {
+		OutStreamer->EmitRawText("\t.byte\t0x2");
+	}
+	PrintRegisterTaintSignature(X86::RCX, OutStreamer.get(), MF);
+	PrintRegisterTaintSignature(X86::RDX, OutStreamer.get(), MF);
+	PrintRegisterTaintSignature(X86::R8, OutStreamer.get(), MF);
+	PrintRegisterTaintSignature(X86::R9, OutStreamer.get(), MF);
+	AsmPrinter::EmitFunctionEntryLabel();
+}
 //===----------------------------------------------------------------------===//
 // Target Registry Stuff
 //===----------------------------------------------------------------------===//

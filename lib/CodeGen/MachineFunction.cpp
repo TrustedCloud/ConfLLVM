@@ -438,18 +438,20 @@ void MachineFunction::print(raw_ostream &OS, const SlotIndexes *Indexes) const {
 
   if (RegInfo && !RegInfo->livein_empty()) {
     OS << "Function Live Ins: ";
-	int index = 0;
+
     for (MachineRegisterInfo::livein_iterator
          I = RegInfo->livein_begin(), E = RegInfo->livein_end(); I != E; ++I) {
       OS << PrintReg(I->first, TRI);
 	  if (I->second) {
 		  OS << " in " << PrintReg(I->second, TRI);  
 	  }
-	  if (index < live_in_types.size())
-		  OS << " (" << live_in_types[index] << ")";
+	  if (live_in_types.find(I->first) != live_in_types.end())
+		  OS << " (" << live_in_types.find(I->first)->second << ")";
+	  else
+		  OS << " (" << "Not inserted " << I->first << ")";
       if (std::next(I) != E)
         OS << ", ";
-	  index++;
+
     }
     OS << '\n';
   }

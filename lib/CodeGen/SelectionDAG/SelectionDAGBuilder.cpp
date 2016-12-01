@@ -5939,6 +5939,7 @@ void SelectionDAGBuilder::LowerCallTo(ImmutableCallSite CS, SDValue Callee,
       .setConvergent(CS.isConvergent());
   std::pair<SDValue, SDValue> Result = lowerInvokable(CLI, EHPadBB);
   if (Result.first.getNode()) {
+	  
 	  MDString *md_node = dyn_cast<MDString>(func_ret_md->getOperand(0).get());
 	  std::string sgx_type_string = md_node->getString().str();
 	  if (sgx_type_string.compare("private") == 0)
