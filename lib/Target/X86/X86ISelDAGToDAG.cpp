@@ -2677,6 +2677,7 @@ void X86DAGToDAGISel::Select(SDNode *Node) {
     MachineSDNode *Result = CurDAG->getMachineNode(newOpc,
                                                    SDLoc(Node),
                                                    MVT::i32, MVT::Other, Ops);
+	Result->sgx_type = StoreNode->sgx_type;
     Result->setMemRefs(MemOp, MemOp + 2);
 
     ReplaceUses(SDValue(StoreNode, 0), SDValue(Result, 1));

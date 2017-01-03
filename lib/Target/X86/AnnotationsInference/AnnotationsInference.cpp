@@ -70,6 +70,25 @@ namespace {
 				return V;
 			}
 		}
+		bool isInSpecialHandleList(const Instruction& I) {
+			
+			const Instruction *Ii = &I;
+			const CallInst *CI = dyn_cast<CallInst>(Ii);
+			//errs() << "Special list check ";
+			//CI->dump();
+
+			Function *TF = CI->getCalledFunction();
+			if (TF == NULL) {
+				return false;
+			}
+			else {
+				std::string func_name = TF->getName().str();
+				if (strncmp(func_name.c_str(), "llvm.", 5) == 0)
+					return true;
+				return false;
+			}
+			return false;
+		}
 		bool runOnFunction(Function &F) override {
 			//errs() << "Inferring annotations for : " << F.getName() << "\n";
 			z3::context func_context;
@@ -335,8 +354,11 @@ namespace {
 							opActual(RO->getOperand(0))->dump();)
 						}
 					}
-					else if (CallInst *CI = dyn_cast<CallInst>(Ii)) {
+					else if (dyn_cast<CallInst>(Ii)!=NULL && !isInSpecialHandleList(*Ii)) {
+						CallInst *CI = dyn_cast<CallInst>(Ii);
 						Function *TF = CI->getCalledFunction();
+						//errs() << "Doing inference for call statement\n";
+						//CI->dump();
 						//if (TF == NULL) {
 						//	llvm::errs() << "Skipping function call!\n";
 						//	continue;
@@ -364,6 +386,7 @@ namespace {
 								}
 							}
 						}
+						
 						for (CallInst::op_iterator Oi = CI->arg_begin(); Oi != CI->arg_end(); Oi++) {
 							
 							std::string op_name = opActual(*Oi)->getName();
@@ -377,6 +400,12 @@ namespace {
 								continue;
 							}
 							int op_depth = variables_depth[op_name];
+							if (func_md->getNumOperands() <= index) {
+								///TODO: NEED TO FIX THIS 
+								errs() << "Overflow in operands!\n";
+								CI->dump();
+								continue;
+							}
 							MDNode* arg_md = dyn_cast<MDNode>(func_md->getOperand(index).get());
 							int md_depth = arg_md->getNumOperands();
 							op_depth = op_depth < md_depth ? op_depth : md_depth;
@@ -435,6 +464,30 @@ namespace {
 								func_solver.add(condition);
 							}
 							ret_name = ret_name + "$p";
+						}
+					}
+					else if (CallInst *CI = dyn_cast<CallInst>(Ii)) {
+						std::string special_name = dyn_cast<CallInst>(Ii)->getCalledFunction()->getName().str();
+					//	errs() << "Special call : " << special_name << "\n";
+						if (strncmp(special_name.c_str(), "llvm.memcpy.", 12) == 0) {
+						//	errs() << "Inserting memcpy\n";
+							std::string arg1_name = opActual(CI->getOperand(0))->getName().str();
+							if (isa<GlobalObject>(opActual(I.getOperand(0)))) {
+								arg1_name = "@" + arg1_name;
+							}
+							std::string arg2_name = opActual(CI->getOperand(1))->getName().str();
+							if (isa<GlobalObject>(opActual(I.getOperand(1)))) {
+								arg2_name = "@" + arg2_name;
+							}
+							
+							if (arg1_name.compare("") && arg2_name.compare(""))
+								insert_implies(arg1_name, arg2_name, 0, 0, variables, variables_depth, func_solver);
+							else {
+								SKIP_DEBUG(errs() << "Skipping ";
+								opActual(BO->getOperand(0))->dump();)
+							}
+
+
 						}
 					}
 					else if (GetElementPtrInst *GI = dyn_cast<GetElementPtrInst>(Ii)) {
@@ -539,6 +592,25 @@ namespace {
 					else if (dyn_cast<AllocaInst>(Ii) != NULL) {
 					}
 					else if (dyn_cast<UnaryInstruction>(Ii)!=NULL) {
+						if (dyn_cast<BitCastInst>(Ii) != NULL) {
+							std::string var_name = Ii->getName().str();
+							MDNode *md_node = Ii->getMetadata("sgx_cast_type");
+							if (!md_node) {
+								//llvm_unreachable("Bitcast with no md found!\n");
+							}
+							else {
+								int total = variables_depth[var_name];
+								for (int i = 0; i < total; i++) {
+									std::string sgx_type = dyn_cast<MDString>(md_node->getOperand(i).get())->getString().str();
+									if (sgx_type.compare("private") == 0) {
+										z3::expr condition = variables.find(var_name)->second == true_const;
+										func_solver.add(condition);
+									}
+									var_name = var_name + "$p";
+								}
+							}
+							
+						}
 						UnaryInstruction *UI = dyn_cast<UnaryInstruction>(Ii);
 						std::string arg1_name = opActual(UI->getOperand(0))->getName().str();
 						if (isa<GlobalObject>(opActual(I.getOperand(0)))) {
@@ -556,7 +628,7 @@ namespace {
 						
 						std::string var_name = PI->getName().str();
 						for (unsigned int i = 0; i < PI->getNumIncomingValues(); i++) {
-							Value *incoming = PI->getIncomingValue(i);
+							Value *incoming = opActual(PI->getIncomingValue(i));
 							std::string incoming_name = incoming->getName().str();
 							if (isa<GlobalObject>(incoming)) {
 								incoming_name = "@" + incoming_name;
@@ -567,6 +639,33 @@ namespace {
 								SKIP_DEBUG(errs() << "Skipping ";
 								incoming->dump();)
 							}
+						}
+					}
+					else if (SelectInst *SI = dyn_cast<SelectInst>(Ii)) {
+						std::string var_name = SI->getName().str();
+						Value *true_value = opActual(SI->getTrueValue());
+						Value *false_value = opActual(SI->getFalseValue());
+						std::string true_value_name = true_value->getName().str();
+						std::string false_value_name = false_value->getName().str();
+						if (isa<GlobalObject>(true_value)) {
+							true_value_name = "@" + true_value_name;
+						}
+						if (isa<GlobalObject>(false_value)) {
+							false_value_name = "@" + false_value_name;
+						}
+						if (true_value_name.compare("")) {
+							insert_implies(true_value_name, var_name, 0, 0, variables, variables_depth, func_solver);
+						}
+						else {
+							SKIP_DEBUG(errs() << "Skipping ";
+							true_value->dump();)
+						}
+						if (false_value_name.compare("")) {
+							insert_implies(false_value_name, var_name, 0, 0, variables, variables_depth, func_solver);
+						}
+						else {
+							SKIP_DEBUG(errs() << "Skipping ";
+							false_value->dump();)
 						}
 					}
 					else {
@@ -581,23 +680,27 @@ namespace {
 			
 			bool solved = func_solver.check();
 			if (solved == false) {
-				llvm::errs() << "No solution for annotations inference. Check for invalid assignments!\n";
+				llvm_unreachable("No solution for annotations inference. Check for invalid assignments!\n");
 				return false;
 			}
 			(void)solved;
 			z3::model func_model = func_solver.get_model();
 			
+
+			/*
 			for (auto Vi = variables.begin(); Vi != variables.end(); Vi++ ) {
 				std::ostringstream ss;
 				ss << func_model.eval(Vi->second);
 				std::string type = ss.str().compare("true") == 0 ? "private" : "public";
 				//errs() << Vi->first << ":" << type <<"\n";
 			}
+			*/
 
 			for (Function::iterator BBi = F.begin(); BBi != F.end(); BBi++) {
 				BasicBlock &BB = *BBi;
 				for (BasicBlock::iterator Ii = BB.begin(); Ii != BB.end(); Ii++) {
 					Instruction &I = *Ii;
+					
 					if (I.getName().compare("") == 0)
 						continue;
 					std::string var_name = I.getName().str();
@@ -605,8 +708,19 @@ namespace {
 					std::vector<Metadata*> md_array;
 					for (int i = 0; i < depth; i++) {
 						std::ostringstream ss;
-						ss << func_model.eval(variables.find(var_name)->second);
-						std::string type = ss.str().compare("true") == 0 ? "private" : "public";
+						
+						func_solver.push();
+						func_solver.add(variables.find(var_name)->second == false_const);
+						
+						bool canPublic = func_solver.check();
+						//errs() << var_name << " = " << canPublic<< "\n";
+						std::string type = canPublic ? "public" : "private";
+						func_solver.pop();
+						
+
+						//ss << func_model.eval(variables.find(var_name)->second);
+						//std::string type = ss.str().compare("true") == 0 ? "private" : "public";
+						
 						md_array.push_back(MDString::get(F.getContext(), type));
 						var_name = var_name + "$p";
 					}
@@ -617,7 +731,7 @@ namespace {
 			
 			return false;
 		}
-		virtual void getAnalysisUsage(AnalysisUsage&Info) {
+		virtual void getAnalysisUsage(AnalysisUsage& Info) {
 			Info.setPreservesAll();
 		}
 	};

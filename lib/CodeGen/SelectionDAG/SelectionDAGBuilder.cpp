@@ -3386,34 +3386,43 @@ void SelectionDAGBuilder::visitGetElementPtr(const User &I) {
   setValue(&I, N);
 }
 
-
+bool getSgxType_recurse(const Value *PtrV, std::set<const Instruction*> analyzed);
 bool getSgxType(const Value *PtrV) {
+	std::set<const Instruction*> analyzed;
+	return getSgxType_recurse(PtrV, analyzed);
+}
+
+bool getSgxType_recurse(const Value *PtrV, std::set<const Instruction*> analyzed) {
 	bool sgx_type;
 	if (const Instruction *PI = dyn_cast<Instruction>(PtrV)) {
+		if (analyzed.find(PI) != analyzed.end()) {
+			return false;
+		}
+		analyzed.insert(PI);
 		MDNode *ptr_md_node = PI->getMetadata("sgx_type");
 		if (ptr_md_node == NULL) {
 			if (const BitCastInst *BI = dyn_cast<BitCastInst>(PI)) {
-				return getSgxType(BI->getOperand(0));
+				return getSgxType_recurse(BI->getOperand(0), analyzed);
 			}
 			else if (const PtrToIntInst *PII = dyn_cast<PtrToIntInst>(PI)) {
-				return getSgxType(PII->getOperand(0));
+				return getSgxType_recurse(PII->getOperand(0), analyzed);
 			}
 			else if (const IntToPtrInst *PII = dyn_cast<IntToPtrInst>(PI)) {
-				return getSgxType(PII->getOperand(0));
+				return getSgxType_recurse(PII->getOperand(0), analyzed);
 			}
 			else if (const GetElementPtrInst *GI = dyn_cast<GetElementPtrInst>(PI)) {
 				if (GI->getNumIndices() == 1) {
-					return getSgxType(GI->getOperand(1));
+					return getSgxType_recurse(GI->getOperand(1), analyzed);
 				}
 			}
 			else if (const BinaryOperator *BI = dyn_cast<BinaryOperator>(PI)) {
-				return getSgxType(BI->getOperand(0)) || getSgxType(BI->getOperand(1));
+				return getSgxType_recurse(BI->getOperand(0), analyzed) || getSgxType_recurse(BI->getOperand(1), analyzed);
 			}
 			else if (const PHINode *PHI = dyn_cast<PHINode>(PI)) {
 				bool val = false;
 				for (unsigned int i = 0; i < PHI->getNumIncomingValues(); i++) {
 					const Value *incoming = PHI->getIncomingValue(i);
-					val = val || getSgxType(incoming);
+					val = val || getSgxType_recurse(incoming, analyzed);
 				}
 				return val;
 			}
@@ -5871,8 +5880,8 @@ void SelectionDAGBuilder::LowerCallTo(ImmutableCallSite CS, SDValue Callee,
   const Function *CF = CS.getCalledFunction();
   int index = 0;
   
-  MDNode *func_md = CF->getMetadata("sgx_type");
-  MDNode *func_ret_md = CF->getMetadata("sgx_return_type");
+  MDNode *func_md = CS.getInstruction()->getMetadata("sgx_call_type");
+  MDNode *func_ret_md = CS.getInstruction()->getMetadata("sgx_call_return_type");
   if (func_md == NULL) {
 	  std::string func_name = CF->getName().str();
 	  NamedMDNode *md = CF->getParent()->getNamedMetadata("func_sgx_type");

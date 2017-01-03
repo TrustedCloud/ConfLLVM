@@ -670,7 +670,7 @@ MachineInstr::MachineInstr(MachineFunction &MF, const MCInstrDesc &tid,
                            DebugLoc dl, bool NoImp)
     : MCID(&tid), Parent(nullptr), Operands(nullptr), NumOperands(0), Flags(0),
       AsmPrinterFlags(0), NumMemRefs(0), MemRefs(nullptr),
-      debugLoc(std::move(dl)), sgx_type(0), register_sgx_type(0)
+      debugLoc(std::move(dl)), sgx_type(0), register_sgx_type(0), isIndirectCall(false), call_arg_taint(-1)
 #ifdef LLVM_BUILD_GLOBAL_ISEL
       ,
       Tys(0)
@@ -694,7 +694,7 @@ MachineInstr::MachineInstr(MachineFunction &MF, const MCInstrDesc &tid,
 MachineInstr::MachineInstr(MachineFunction &MF, const MachineInstr &MI)
     : MCID(&MI.getDesc()), Parent(nullptr), Operands(nullptr), NumOperands(0),
       Flags(0), AsmPrinterFlags(0), NumMemRefs(MI.NumMemRefs),
-      MemRefs(MI.MemRefs), debugLoc(MI.getDebugLoc()), sgx_type(MI.sgx_type), register_sgx_type(MI.register_sgx_type)
+      MemRefs(MI.MemRefs), debugLoc(MI.getDebugLoc()), sgx_type(MI.sgx_type), register_sgx_type(MI.register_sgx_type), isIndirectCall(MI.isIndirectCall), call_arg_taint(MI.call_arg_taint)
 #ifdef LLVM_BUILD_GLOBAL_ISEL
       ,
       Tys(0)
@@ -2016,6 +2016,10 @@ void MachineInstr::print(raw_ostream &OS, ModuleSlotTracker &MST,
 	  OS << ", register_sgx_public";
   else
 	  OS << ", register_sgx_undef(" << register_sgx_type << ")";
+  if (isIndirectCall)
+	  OS << ", indirect_call";
+  if (call_arg_taint != -1)
+	  OS << ", call_arg_taint(" << call_arg_taint << ")";
   OS << '\n';
 }
 

@@ -4288,6 +4288,9 @@ static bool shouldLowerMemFuncForSize(const MachineFunction &MF) {
   return MF.getFunction()->optForSize();
 }
 
+
+bool getSgxType(const Value *PtrV);
+
 static SDValue getMemcpyLoadsAndStores(SelectionDAG &DAG, const SDLoc &dl,
                                        SDValue Chain, SDValue Dst, SDValue Src,
                                        uint64_t Size, unsigned Align,
@@ -4350,6 +4353,14 @@ static SDValue getMemcpyLoadsAndStores(SelectionDAG &DAG, const SDLoc &dl,
 
   MachineMemOperand::Flags MMOFlags =
       isVol ? MachineMemOperand::MOVolatile : MachineMemOperand::MONone;
+  const llvm::Value* source_op = *(SrcPtrInfo.V.getAddrOfPtr1());
+//  if (dyn_cast<Instruction>(source_op)->getMetadata("sgx_type") == NULL) {
+//	  source_op->dump();
+//	  llvm_unreachable("No md for ^");
+// }
+  if(getSgxType(source_op))
+  //if(dyn_cast<MDString>(dyn_cast<Instruction>(source_op)->getMetadata("sgx_type")->getOperand(1).get())->getString().str().compare("private")==0)
+	MMOFlags |= MachineMemOperand::MOTargetFlag1;
   SmallVector<SDValue, 8> OutChains;
   unsigned NumMemOps = MemOps.size();
   uint64_t SrcOff = 0, DstOff = 0;

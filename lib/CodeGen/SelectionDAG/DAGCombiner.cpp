@@ -861,7 +861,9 @@ SDValue DAGCombiner::ReassociateOps(unsigned Opc, const SDLoc &DL, SDValue N0,
 
 SDValue DAGCombiner::CombineTo(SDNode *N, const SDValue *To, unsigned NumTo,
                                bool AddTo) {
-  assert(N->getNumValues() == NumTo && "Broken CombineTo call!");
+
+	
+	assert(N->getNumValues() == NumTo && "Broken CombineTo call!");
   ++NodesCombined;
   DEBUG(dbgs() << "\nReplacing.1 ";
         N->dump(&DAG);
@@ -1245,7 +1247,7 @@ void DAGCombiner::Run(CombineLevel AtLevel) {
   Level = AtLevel;
   LegalOperations = Level >= AfterLegalizeVectorOps;
   LegalTypes = Level >= AfterLegalizeTypes;
-
+//  errs() << "Run on level = " << AtLevel << "\n";
   // Add all the dag nodes to the worklist.
   for (SDNode &Node : DAG.allnodes())
     AddToWorklist(&Node);
@@ -1299,7 +1301,7 @@ void DAGCombiner::Run(CombineLevel AtLevel) {
     for (const SDValue &ChildN : N->op_values())
       if (!CombinedNodes.count(ChildN.getNode()))
         AddToWorklist(ChildN.getNode());
-
+	
     SDValue RV = combine(N);
 
     if (!RV.getNode())
@@ -11327,6 +11329,16 @@ bool DAGCombiner::MergeStoresOfConstantsOrVecElts(
 
   bool UseAA = CombinerAA.getNumOccurrences() > 0 ? CombinerAA
                                                   : DAG.getSubtarget().useAA();
+
+
+  int sgx_type = StoreNodes[0].MemNode->sgx_type;
+
+  for (unsigned i = 0; i < NumStores; ++i) {
+	  if (StoreNodes[i].MemNode->sgx_type != sgx_type)
+		  llvm_unreachable("Non matching sgx types for combine!");
+  }
+
+  NewStore->sgx_type = sgx_type;
   if (UseAA) {
     // Replace all merged stores with the new store.
     for (unsigned i = 0; i < NumStores; ++i)

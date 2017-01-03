@@ -24,6 +24,8 @@
 #include "llvm/Support/DataTypes.h"
 #include "llvm/Support/ErrorHandling.h"
 
+#include "llvm/Transforms/AnnotationsInference.h"
+
 namespace llvm {
 class AsmPrinterHandler;
 class BlockAddress;
@@ -66,6 +68,8 @@ class TargetMachine;
 /// This class is intended to be used as a driving class for all asm writers.
 class AsmPrinter : public MachineFunctionPass {
 public:
+
+  register_set_map start_set;
   /// Target machine description.
   ///
   TargetMachine &TM;

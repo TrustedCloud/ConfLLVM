@@ -495,7 +495,32 @@ bool X86AsmPrinter::PrintAsmMemoryOperand(const MachineInstr *MI,
   return false;
 }
 
+
+void PrintModuleMacros(llvm::MCStreamer *OutStreamer) {
+	OutStreamer->EmitRawText("\t.macro\tswitch_to_original");
+	OutStreamer->EmitRawText("\tmovabsq\t%rax, 0x900000010");
+	OutStreamer->EmitRawText("\tmovabsq\t0x900000038, %rax");
+	OutStreamer->EmitRawText("\txchgq\t%rax, %rsp");
+	OutStreamer->EmitRawText("\tmovabsq\t%rax, 0x900000030");
+	OutStreamer->EmitRawText("\tmovabsq\t0x900000010, %rax");
+	OutStreamer->EmitRawText("\t.endm");
+
+	OutStreamer->EmitRawText("\t.macro\tswitch_to_shadow");
+	OutStreamer->EmitRawText("\tmovabsq\t%rax, 0x900000010");
+	OutStreamer->EmitRawText("\tmovabsq\t0x900000030, %rax");
+	OutStreamer->EmitRawText("\txchgq\t%rax, %rsp");
+	OutStreamer->EmitRawText("\tmovabsq\t%rax, 0x900000038");
+	OutStreamer->EmitRawText("\tmovabsq\t0x900000010, %rax");
+	OutStreamer->EmitRawText("\t.endm");
+
+}
+
 void X86AsmPrinter::EmitStartOfAsmFile(Module &M) {
+  
+
+  sgxFunctionMagicReset();
+  sgxCallMagicReset();
+  PrintModuleMacros(OutStreamer.get());
   const Triple &TT = TM.getTargetTriple();
 
   if (TT.isOSBinFormatMachO())
@@ -643,10 +668,20 @@ void X86AsmPrinter::EmitEndOfAsmFile(Module &M) {
 
     SM.serializeToStackMapSection();
   }
-
+  
   if (TT.isOSBinFormatELF()) {
     SM.serializeToStackMapSection();
     FM.serializeToFaultMapSection();
+  }
+
+
+  OutStreamer->EmitRawText("\t.section\tsgx_flab");
+  for (auto label : getFunctionMagicLabels()) {
+	  OutStreamer->EmitRawText("\t.quad\t" + label);
+  }
+  OutStreamer->EmitRawText("\t.section\tsgx_clab");
+  for (auto label : getCallMagicLabels()) {
+	  OutStreamer->EmitRawText("\t.quad\t" + label);
   }
 }
 
@@ -667,14 +702,36 @@ void PrintRegisterTaintSignature(unsigned Reg, llvm::MCStreamer *OutStreamer, co
 		OutStreamer->EmitRawText("\t.byte\t0x1");
 }
 
+int getRegisterTaintSignature(unsigned Reg, const llvm::MachineFunction *MF) {
+	const TargetMachine &TM = MF->getTarget();
+	const MCRegisterInfo *MRI = TM.getMCRegisterInfo();
+
+	int act_reg = -1;
+	for (auto reg_iterator = MF->live_in_types.begin(); reg_iterator != MF->live_in_types.end(); reg_iterator++) {
+		if (MRI->isSuperOrSubRegisterEq(reg_iterator->first, Reg))
+			act_reg = reg_iterator->first;
+	}
+	if (act_reg != -1)
+		return MF->live_in_types.find(act_reg)->second;
+	else
+		return 1;
+}
+
 void X86AsmPrinter::EmitFunctionEntryLabel() {
-	OutStreamer->EmitRawText(CurrentFnSym->getName().str() + ".function_magic:");
-	OutStreamer->EmitRawText("\t.quad\t0x0123456789ABCDEF");
-	OutStreamer->EmitRawText("\t.quad\t0xFEDCBA9876543210");
+	OutStreamer->EmitRawText(getNextFunctionMagic()+":");
+	//OutStreamer->EmitRawText("\t.quad\t0x0123456789ABCDEF");
+	//OutStreamer->EmitRawText("\t.quad\t0xFEDCBA9876543210");
+	//OutStreamer->EmitRawText("\t.quad\t__function_magic_part8");
+	//OutStreamer->EmitRawText("\t.quad\t__function_magic_part16");
+	//OutStreamer->EmitRawText("\t.quad\t0");
+	//OutStreamer->EmitRawText("\t.quad\t0");
 	//taint for rcd,rdx,r8,r9
+	
+	
 	MDNode *md_ret = MF->getFunction()->getMetadata("sgx_return_type");
 	MDString *return_type_string = dyn_cast<MDString>(md_ret->getOperand(0).get());
 	assert(return_type_string);
+	/*
 	if (return_type_string->getString().str().compare("private") == 0) {
 		OutStreamer->EmitRawText("\t.byte\t0x1");
 	}
@@ -685,6 +742,31 @@ void X86AsmPrinter::EmitFunctionEntryLabel() {
 	PrintRegisterTaintSignature(X86::RDX, OutStreamer.get(), MF);
 	PrintRegisterTaintSignature(X86::R8, OutStreamer.get(), MF);
 	PrintRegisterTaintSignature(X86::R9, OutStreamer.get(), MF);
+	*/
+	int taint_flag = 0;
+	if (return_type_string->getString().str().compare("private") == 0)
+		taint_flag = 1;
+	else
+		taint_flag = 0;
+	taint_flag *= 2;
+	if (getRegisterTaintSignature(X86::RCX, MF) == 1)
+		taint_flag += 1;
+	taint_flag *= 2;
+	if (getRegisterTaintSignature(X86::RDX, MF) == 1)
+		taint_flag += 1;
+	taint_flag *= 2;
+	if (getRegisterTaintSignature(X86::R8, MF) == 1)
+		taint_flag += 1;
+	taint_flag *= 2;
+	if (getRegisterTaintSignature(X86::R9, MF) == 1)
+		taint_flag += 1;
+
+
+	OutStreamer->EmitRawText("\t.byte\t" + std::to_string(taint_flag));
+	OutStreamer->EmitRawText("\t.space\t7, 0x0");
+	//for (int i = 0; i < 15; i++)
+	//	OutStreamer->EmitRawText("\t.byte\t0x90");
+	//OutStreamer->EmitRawText("\t.space\t15, 0x90");
 	AsmPrinter::EmitFunctionEntryLabel();
 }
 //===----------------------------------------------------------------------===//

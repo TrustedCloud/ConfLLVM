@@ -51,6 +51,8 @@
 #include "llvm/Target/TargetLoweringObjectFile.h"
 #include "llvm/Target/TargetRegisterInfo.h"
 #include "llvm/Target/TargetSubtargetInfo.h"
+
+
 using namespace llvm;
 
 #define DEBUG_TYPE "asm-printer"
@@ -575,6 +577,8 @@ void AsmPrinter::EmitFunctionHeader() {
   // do their wild and crazy things as required.
   EmitFunctionEntryLabel();
   OutStreamer->EmitRawText("#function starts here - " + CurrentFnSym->getName().str());
+  int return_null;
+  start_set = processMachineFunctionForTaint(MF, NULL, -1, return_null);
   // If the function had address-taken blocks that got deleted, then we have
   // references to the dangling symbols.  Emit them at the start of the function
   // so that we don't get references to undefined symbols.

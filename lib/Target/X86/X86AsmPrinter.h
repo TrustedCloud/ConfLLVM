@@ -30,7 +30,35 @@ class LLVM_LIBRARY_VISIBILITY X86AsmPrinter : public AsmPrinter {
   StackMaps SM;
   FaultMaps FM;
   std::unique_ptr<MCCodeEmitter> CodeEmitter;
+  int sgx_function_magic_labels_index;
+  int sgx_call_magic_labels_index;
 
+  void sgxFunctionMagicReset() {
+	  sgx_function_magic_labels_index = 0;
+  }
+  void sgxCallMagicReset() {
+	  sgx_call_magic_labels_index = 0;
+  }
+  std::string getNextCallMagic() {
+	  sgx_call_magic_labels_index++;
+	  return "__sgx_call_magic_" + std::to_string(sgx_call_magic_labels_index - 1);
+  }
+  std::string getNextFunctionMagic() {
+	  sgx_function_magic_labels_index++;
+	  return "__sgx_function_magic_"+std::to_string(sgx_function_magic_labels_index - 1);
+  }
+  std::vector<std::string> getFunctionMagicLabels() {
+	  std::vector<std::string> labels;
+	  for (int i = 0; i < sgx_function_magic_labels_index; i++)
+		  labels.push_back("__sgx_function_magic_" + std::to_string(i));
+	  return labels;
+  }
+  std::vector<std::string> getCallMagicLabels() {
+	  std::vector<std::string> labels;
+	  for (int i = 0; i < sgx_call_magic_labels_index; i++)
+		  labels.push_back("__sgx_call_magic_" + std::to_string(i));
+	  return labels;
+  }
   // This utility class tracks the length of a stackmap instruction's 'shadow'.
   // It is used by the X86AsmPrinter to ensure that the stackmap shadow
   // invariants (i.e. no other stackmaps, patchpoints, or control flow within
@@ -67,6 +95,7 @@ class LLVM_LIBRARY_VISIBILITY X86AsmPrinter : public AsmPrinter {
     // recently encountered STACKMAP, stopping when that number is greater than
     // or equal to RequiredShadowSize.
     unsigned RequiredShadowSize = 0, CurrentShadowSize = 0;
+	
   };
 
   StackMapShadowTracker SMShadowTracker;

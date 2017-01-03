@@ -178,7 +178,8 @@ EmitCopyFromReg(SDNode *Node, unsigned ResNo, bool IsClone, bool IsCloned,
             VRBase).addReg(SrcReg);
 	MIB.getInstr()->sgx_type = Node->sgx_type;
 	MIB.getInstr()->register_sgx_type = Node->register_sgx_type;
-
+	MIB.getInstr()->isIndirectCall = Node->isIndirectCall;
+	MIB.getInstr()->call_arg_taint = Node->call_arg_taint;
   }
 
   SDValue Op(Node, ResNo);
@@ -790,7 +791,8 @@ EmitMachineNode(SDNode *Node, bool IsClone, bool IsCloned,
   MachineInstrBuilder MIB = BuildMI(*MF, Node->getDebugLoc(), II);
   MIB.getInstr()->sgx_type = Node->sgx_type;
   MIB.getInstr()->register_sgx_type = Node->register_sgx_type;
-  
+  MIB.getInstr()->isIndirectCall = Node->isIndirectCall;
+  MIB.getInstr()->call_arg_taint = Node->call_arg_taint;
   // Add result register values for things that are defined by this
   // instruction.
   if (NumResults)

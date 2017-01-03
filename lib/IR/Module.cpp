@@ -205,7 +205,7 @@ Function *Module::getFunction(StringRef Name) const {
 /// the top-level PointerType, which represents the address of the global.
 /// If AllowLocal is set to true, this function will return types that
 /// have an local. By default, these types are not returned.
-///
+/// 
 GlobalVariable *Module::getGlobalVariable(StringRef Name, bool AllowLocal) {
   if (GlobalVariable *Result =
       dyn_cast_or_null<GlobalVariable>(getNamedValue(Name)))

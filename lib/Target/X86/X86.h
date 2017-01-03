@@ -89,6 +89,8 @@ FunctionPass *createX86FixupBWInsts();
 
 FunctionPass *createMachineInstPrint();
 
+FunctionPass *createSgxMCPass();
+
 void initializeFixupBWInstPassPass(PassRegistry &);
 } // End llvm namespace
 

@@ -907,7 +907,15 @@ void InlineSpiller::spillAroundUses(unsigned Reg) {
     MachineInstr *MI = &*(RegI++);
 	if (isDefOf(MI, Reg)) {
 		std::set<std::pair<const MachineInstr*, unsigned int>> accessed_mirs;
-		realized_sgx_type = inferMIRRegisterType(MI, Reg, accessed_mirs);
+
+
+		//errs() << "SPILLING - \n";
+		//MI->dump();
+		//errs() << "And the function - \n";
+		//MI->getParent()->getParent()->dump();
+		//errs() << "End of function\n";
+		realized_sgx_type = inferTaintForSpilling(MI, Reg);
+		//realized_sgx_type = inferMIRRegisterType(MI, Reg, accessed_mirs);
 		if (realized_sgx_type == -1)
 			llvm_unreachable("MIR Inference reached top and not in live ins");
 	}

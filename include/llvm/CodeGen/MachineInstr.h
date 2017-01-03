@@ -138,6 +138,9 @@ public:
 
   int sgx_type;
   int register_sgx_type;
+  int call_arg_taint;
+  bool isIndirectCall;
+
   const MachineBasicBlock* getParent() const { return Parent; }
   MachineBasicBlock* getParent() { return Parent; }
 

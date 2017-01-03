@@ -31,6 +31,9 @@ static cl::opt<bool> EnableMachineCombinerPass("x86-machine-combiner",
 
 static cl::opt<bool> EnableMachineInstPrint("machine-inst-print", cl::desc("Print machine instructions"), cl::init(false), cl::Hidden);
 
+static cl::opt<bool> GenerateSgxCode("generate-sgx-code", cl::Hidden,
+	cl::desc("Generate code for SGX(Some machine optimizations will be disabled)"));
+
 namespace llvm {
 void initializeWinEHStatePassPass(PassRegistry &);
 }
@@ -306,6 +309,10 @@ bool X86PassConfig::addPreISel() {
 }
 
 void X86PassConfig::addPreRegAlloc() {
+  if (GenerateSgxCode) {
+	  addPass(createSgxMCPass());
+		return;
+  }
   if (getOptLevel() != CodeGenOpt::None) {
     addPass(createX86FixupSetCC());
     addPass(createX86OptimizeLEAs());

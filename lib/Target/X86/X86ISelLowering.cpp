@@ -2984,6 +2984,29 @@ static SDValue getMOVL(SelectionDAG &DAG, const SDLoc &dl, MVT VT, SDValue V1,
   return DAG.getVectorShuffle(VT, dl, V1, V2, Mask);
 }
 
+
+
+int getCallArgsTaint(const llvm::Instruction* I) {
+	int final_taint = 0;
+	MDNode* func_md = I->getMetadata("sgx_call_type");
+	for(int i = 0 ; i < 4; i++)
+		if (func_md->getNumOperands() > i) {
+			MDNode *arg_node = dyn_cast<MDNode>(func_md->getOperand(i).get());
+			MDString *sgx_type = dyn_cast<MDString>(arg_node->getOperand(0).get());
+			if (sgx_type->getString().str().compare("private") == 0)
+				final_taint |= (1 << (3 - i));
+		}
+		else
+			final_taint |= (1 << (3-i));
+	MDNode *ret_md = I->getMetadata("sgx_call_return_type");
+	if (ret_md->getNumOperands() > 0) {
+		MDString *sgx_type = dyn_cast<MDString>(ret_md->getOperand(0).get());
+		if (sgx_type->getString().str().compare("private") == 0)
+			final_taint |= (1 << 4);
+	}
+	return final_taint;
+}
+
 SDValue
 X86TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
                              SmallVectorImpl<SDValue> &InVals) const {
@@ -3429,7 +3452,11 @@ X86TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
 	  Chain->register_sgx_type = 1;
   else
 	  Chain->register_sgx_type = 2;
-
+  if (CS->getCalledFunction())
+	  Chain->isIndirectCall = false;
+  else
+	  Chain->isIndirectCall = true;
+  Chain->call_arg_taint = getCallArgsTaint(CF);
   InFlag = Chain.getValue(1);
 
   // Create the CALLSEQ_END node.

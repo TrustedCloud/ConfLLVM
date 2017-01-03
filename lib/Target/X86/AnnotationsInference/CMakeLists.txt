@@ -12,6 +12,7 @@ add_llvm_library(LLVMAnnotationsInference
 	AnnotationsInference.cpp
        	Custom.cpp
 	MIRRegisterInference.cpp
+	SgxMCPasses.cpp
 	${Z3_API_HEADERS}	
 	ADDITIONAL_HEADER_DIRS
   	${LLVM_MAIN_INCLUDE_DIR}/llvm/Transforms
