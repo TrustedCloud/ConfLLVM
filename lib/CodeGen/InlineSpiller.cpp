@@ -109,6 +109,7 @@ class HoistSpillHelper : private LiveRangeEdit::Delegate {
                       DenseMap<MachineBasicBlock *, unsigned> &SpillsToIns);
 
 public:
+
   HoistSpillHelper(MachineFunctionPass &pass, MachineFunction &mf,
                    VirtRegMap &vrm)
       : MF(mf), LIS(pass.getAnalysis<LiveIntervals>()),
@@ -150,7 +151,7 @@ class InlineSpiller : public Spiller {
 
   int StackSlot;
   unsigned Original;
-  int realized_sgx_type;
+  
 
   // All registers to spill to StackSlot, including the main register.
   SmallVector<unsigned, 8> RegsToSpill;
@@ -171,6 +172,7 @@ class InlineSpiller : public Spiller {
   ~InlineSpiller() override {}
 
 public:
+	int realized_sgx_type;
   InlineSpiller(MachineFunctionPass &pass, MachineFunction &mf, VirtRegMap &vrm)
       : MF(mf), LIS(pass.getAnalysis<LiveIntervals>()),
         LSS(pass.getAnalysis<LiveStacks>()),
@@ -181,7 +183,8 @@ public:
         TII(*mf.getSubtarget().getInstrInfo()),
         TRI(*mf.getSubtarget().getRegisterInfo()),
         MBFI(pass.getAnalysis<MachineBlockFrequencyInfo>()),
-        HSpiller(pass, mf, vrm) {}
+        HSpiller(pass, mf, vrm) {
+  }
 
   void spill(LiveRangeEdit &) override;
   void postOptimization() override;
@@ -1472,13 +1475,17 @@ void HoistSpillHelper::hoistAllSpills() {
       MachineBasicBlock::iterator MI = IPA.getLastInsertPointIter(OrigLI, *BB);
       TII.storeRegToStackSlot(*BB, MI, LiveReg, false, Slot,
                               MRI.getRegClass(LiveReg), &TRI);
+	  
       LIS.InsertMachineInstrRangeInMaps(std::prev(MI), MI);
-      ++NumSpills;
+	  assert(SpillsToRm.size() > 0);
+	  std::prev(MI)->sgx_type = SpillsToRm[0]->sgx_type;
+	  ++NumSpills;
     }
 
     // Remove redundant spills or change them to dead instructions.
     NumSpills -= SpillsToRm.size();
     for (auto const RMEnt : SpillsToRm) {
+	 // RMEnt->dump();
       RMEnt->setDesc(TII.get(TargetOpcode::KILL));
       for (unsigned i = RMEnt->getNumOperands(); i; --i) {
         MachineOperand &MO = RMEnt->getOperand(i - 1);

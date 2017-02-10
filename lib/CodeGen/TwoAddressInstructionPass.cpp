@@ -1292,6 +1292,7 @@ tryInstructionTransform(MachineBasicBlock::iterator &mi,
       TII->getOpcodeAfterMemoryUnfold(MI.getOpcode(),
                                       /*UnfoldLoad=*/true,
                                       /*UnfoldStore=*/false,
+
                                       &LoadRegIndex);
     if (NewOpc != 0) {
       const MCInstrDesc &UnfoldMCID = TII->get(NewOpc);
@@ -1321,7 +1322,13 @@ tryInstructionTransform(MachineBasicBlock::iterator &mi,
 
         DEBUG(dbgs() << "2addr:    NEW LOAD: " << *NewMIs[0]
                      << "2addr:    NEW INST: " << *NewMIs[1]);
+		if (NewMIs[0]->mayLoad() && MI.mayLoad()) {
+			NewMIs[0]->sgx_type = MI.sgx_type;
+			NewMIs[0]->register_sgx_type = MI.register_sgx_type;
+			NewMIs[0]->isIndirectCall = MI.isIndirectCall;
+			NewMIs[0]->call_arg_taint = MI.call_arg_taint;
 
+		}
         // Transform the instruction, now that it no longer has a load.
         unsigned NewDstIdx = NewMIs[1]->findRegisterDefOperandIdx(regA);
         unsigned NewSrcIdx = NewMIs[1]->findRegisterUseOperandIdx(regB);

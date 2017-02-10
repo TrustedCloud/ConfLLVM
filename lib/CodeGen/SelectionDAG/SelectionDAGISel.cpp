@@ -2938,6 +2938,7 @@ void SelectionDAGISel::SelectCodeCommon(SDNode *NodeToMatch,
       continue;
     }
     case OPC_RecordMemRef:
+		
 		cast<MemSDNode>(N)->getMemOperand()->sgx_type = N->sgx_type;
       MatchedMemRefs.push_back(cast<MemSDNode>(N)->getMemOperand());
       continue;
@@ -3398,6 +3399,7 @@ void SelectionDAGISel::SelectCodeCommon(SDNode *NodeToMatch,
       }
 	  int sgx_type = NodeToMatch->sgx_type;
 	  for (auto a : MatchedMemRefs) {
+
 		  if (a->sgx_type == 0)
 			  continue;
 		  if (sgx_type == 0)
@@ -3408,8 +3410,8 @@ void SelectionDAGISel::SelectCodeCommon(SDNode *NodeToMatch,
 			  
 	  }
 	  Res->sgx_type = sgx_type;
-
-      // If the node had chain/glue results, update our notion of the current
+	 
+	  // If the node had chain/glue results, update our notion of the current
       // chain and glue.
       if (EmitNodeInfo & OPFL_GlueOutput) {
         InputGlue = SDValue(Res, VTs.size()-1);
@@ -3465,7 +3467,6 @@ void SelectionDAGISel::SelectCodeCommon(SDNode *NodeToMatch,
         cast<MachineSDNode>(Res)
           ->setMemRefs(MemRefs, MemRefs + NumMemRefs);
       }
-
       DEBUG(dbgs() << "  "
                    << (IsMorphNodeTo ? "Morphed" : "Created")
                    << " node: "; Res->dump(CurDAG); dbgs() << "\n");

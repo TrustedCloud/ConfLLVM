@@ -3341,7 +3341,7 @@ X86TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
     InFlag = Chain.getValue(1);
   }
 
-  if (DAG.getTarget().getCodeModel() == CodeModel::Large) {
+  if (DAG.getTarget().getCodeModel() == CodeModel::Large && false) {
     assert(Is64Bit && "Large code model is only legal in 64-bit mode.");
     // In the 64-bit large code model, we have to make all calls
     // through a register, since the call instruction's 32-bit

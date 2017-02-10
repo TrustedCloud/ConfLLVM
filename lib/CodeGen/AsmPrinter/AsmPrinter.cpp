@@ -842,6 +842,17 @@ void AsmPrinter::emitFrameAlloc(const MachineInstr &MI) {
 
 /// EmitFunctionBody - This method emits the body and trailer for a
 /// function.
+
+int getMemLocation(const MachineInstr *MI) {
+	int i = 0;
+	for (auto MO = MI->getDesc().OpInfo; MO != NULL; MO++) {
+		if (MO->OperandType == MCOI::OPERAND_MEMORY)
+			return i;
+		i++;
+	}
+	return -1;
+}
+
 void AsmPrinter::EmitFunctionBody() {
   EmitFunctionHeader();
 
@@ -855,8 +866,20 @@ void AsmPrinter::EmitFunctionBody() {
   for (auto &MBB : *MF) {
     // Print a label for the basic block.
     EmitBasicBlockStart(MBB);
-    for (auto &MI : MBB) {
+	checked_offsets.clear();
+	closed_offset_pairs.clear();
+	for (auto &MI : MBB) {
+		if (!MI.memoperands_empty()) {
+			int mem_index = getMemLocation(&MI);
+			//TODO : compelete this
+		}
+	}
 
+
+
+
+    for (auto &MI : MBB) {
+	  
       // Print the assembly for the instruction.
       if (!MI.isPosition() && !MI.isImplicitDef() && !MI.isKill() &&
           !MI.isDebugValue()) {

@@ -914,8 +914,10 @@ MCSection *TargetLoweringObjectFileCOFF::getExplicitSectionGlobal(
 }
 
 static const char *getCOFFSectionNameForUniqueGlobal(SectionKind Kind) {
+
   if (Kind.isText())
     return ".text";
+  return "sgxg_pub";
   if (Kind.isBSS())
     return ".bss";
   if (Kind.isThreadLocal())
@@ -937,11 +939,16 @@ MCSection *TargetLoweringObjectFileCOFF::SelectSectionForGlobal(
     EmitUniquedSection = TM.getDataSections();
 
   if ((EmitUniquedSection && !Kind.isCommon()) || GV->hasComdat()) {
-	  return GlobalsRelocatedPublic;
+	//  if(dyn_cast<GlobalVariable>(GV))
+	//	return GlobalsRelocatedPublic;
     const char *Name = getCOFFSectionNameForUniqueGlobal(Kind);
     unsigned Characteristics = getCOFFSectionFlags(Kind, TM);
-
-    Characteristics |= COFF::IMAGE_SCN_LNK_COMDAT;
+	
+	if (strcmp(Name, ".text")) {
+		Characteristics |= COFF::IMAGE_SCN_MEM_WRITE;
+	}
+	Characteristics |= COFF::IMAGE_SCN_LNK_COMDAT;
+	
     int Selection = getSelectionForCOFF(GV);
     if (!Selection)
       Selection = COFF::IMAGE_COMDAT_SELECT_NODUPLICATES;
@@ -973,6 +980,7 @@ MCSection *TargetLoweringObjectFileCOFF::SelectSectionForGlobal(
   
   
   const GlobalVariable *GVar = dyn_cast<GlobalVariable>(GV);
+ // GV->dump();
   if (GVar) {
 	  MDNode *md_node = GVar->getMetadata("sgx_type");
 	  std::string type = dyn_cast<MDString>(md_node->getOperand(1).get())->getString();
@@ -982,6 +990,8 @@ MCSection *TargetLoweringObjectFileCOFF::SelectSectionForGlobal(
 		  return GlobalsRelocatedPrivate;
   }
   else {
+	  errs() << "Not a GVar still this is called, I dont know what to do. So I am just returning Public\n btw the object is";
+	  GV->dump();
 	  return GlobalsRelocatedPublic;
   }
 

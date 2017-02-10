@@ -1127,6 +1127,7 @@ Instruction *InstCombiner::visitUDiv(BinaryOperator &I) {
 }
 
 Instruction *InstCombiner::visitSDiv(BinaryOperator &I) {
+
   Value *Op0 = I.getOperand(0), *Op1 = I.getOperand(1);
 
   if (Value *V = SimplifyVectorOp(I))

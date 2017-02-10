@@ -10,6 +10,8 @@
 #include "MCTargetDesc/X86BaseInfo.h"
 #include "Utils/X86ShuffleDecode.h"
 
+//#define DO_INFER_DEBUG
+
 #ifdef DO_INFER_DEBUG
 #define INFER_DEBUG(x) x
 #else
@@ -41,6 +43,8 @@ namespace llvm {
 			llvm_unreachable("All loads must have a type!");
 		}
 		if (MI->isCall()) {
+			if (MI->getFlags() & MachineInstr::FrameSetup)
+				return 2;
 			llvm_unreachable("This shouldn't happen (Call without register_sgx_type)!");
 		}
 
@@ -79,39 +83,37 @@ namespace llvm {
 			INFER_DEBUG(errs() << "Analyzing ";
 			MI->dump();)
 			bool isDef = false;
-			unsigned defReg = 0;
+			std::vector<unsigned> defRegs;
 			int defCounter = 0;
 			for (auto OP = MI->operands_begin(); OP != MI->operands_end(); OP++) {
 				if (OP->isReg() && OP->isDef()) {
 					int Reg = OP->getReg();
 					if (Reg != X86::RSP && Reg != X86::EFLAGS && Reg != X86::NoRegister) {
 						isDef = true;
-						if (checkRegisterEqual(TRI, Reg, defReg))
-							defCounter++;
-						defReg = Reg;
-
+						defRegs.push_back(Reg);
 					}
 				}
 			}
-			if (defCounter > 1) {
-				MI->dump();
-				llvm_unreachable("More than one def on MCInstr");
-			}
+			
+			
 			if (isDef) {
 				int taint = inferTaintForInstruction(MI.getInstrIterator().getNodePtrUnchecked(), temp_set);
-				if (taint == 1) {
-					if (!TRI->isPhysicalRegister(defReg))
-						temp_set.insert(defReg);
-					else
-						for (MCRegAliasIterator alias(defReg, TRI, true); alias.isValid(); ++alias)
-							temp_set.insert(*alias);
-				}
-				else {
-					if (!TRI->isPhysicalRegister(defReg))
-						temp_set.erase(defReg);
-					else
-						for (MCRegAliasIterator alias(defReg, TRI, true); alias.isValid(); ++alias)
-							temp_set.erase(*alias);
+				for (int i = 0; i < defRegs.size(); i++) {
+					unsigned defReg = defRegs[i];
+					if (taint == 1) {
+						if (!TRI->isPhysicalRegister(defReg))
+							temp_set.insert(defReg);
+						else
+							for (MCRegAliasIterator alias(defReg, TRI, true); alias.isValid(); ++alias)
+								temp_set.insert(*alias);
+					}
+					else {
+						if (!TRI->isPhysicalRegister(defReg))
+							temp_set.erase(defReg);
+						else
+							for (MCRegAliasIterator alias(defReg, TRI, true); alias.isValid(); ++alias)
+								temp_set.erase(*alias);
+					}
 				}
 			}
 			if (OMI == MI.getInstrIterator().getNodePtrUnchecked()) {

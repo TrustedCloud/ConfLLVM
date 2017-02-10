@@ -2422,10 +2422,12 @@ void X86DAGToDAGISel::Select(SDNode *Node) {
     }
 
     if (foldedLoad) {
+		
       SDValue Ops[] = { Tmp0, Tmp1, Tmp2, Tmp3, Tmp4, N1.getOperand(0),
                         InFlag };
       SDNode *CNode =
         CurDAG->getMachineNode(MOpc, dl, MVT::Other, MVT::Glue, Ops);
+	  CNode->sgx_type = N1.getNode()->sgx_type;
       InFlag = SDValue(CNode, 1);
       // Update the chain.
       ReplaceUses(N1.getValue(1), SDValue(CNode, 0));

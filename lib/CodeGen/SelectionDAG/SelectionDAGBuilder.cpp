@@ -3388,6 +3388,7 @@ void SelectionDAGBuilder::visitGetElementPtr(const User &I) {
 
 bool getSgxType_recurse(const Value *PtrV, std::set<const Instruction*> analyzed);
 bool getSgxType(const Value *PtrV) {
+	//PtrV->dump();
 	std::set<const Instruction*> analyzed;
 	return getSgxType_recurse(PtrV, analyzed);
 }
@@ -3395,6 +3396,7 @@ bool getSgxType(const Value *PtrV) {
 bool getSgxType_recurse(const Value *PtrV, std::set<const Instruction*> analyzed) {
 	bool sgx_type;
 	if (const Instruction *PI = dyn_cast<Instruction>(PtrV)) {
+
 		if (analyzed.find(PI) != analyzed.end()) {
 			return false;
 		}
@@ -3411,8 +3413,8 @@ bool getSgxType_recurse(const Value *PtrV, std::set<const Instruction*> analyzed
 				return getSgxType_recurse(PII->getOperand(0), analyzed);
 			}
 			else if (const GetElementPtrInst *GI = dyn_cast<GetElementPtrInst>(PI)) {
-				if (GI->getNumIndices() == 1) {
-					return getSgxType_recurse(GI->getOperand(1), analyzed);
+				if (GI->getNumIndices() >= 1) {
+					return getSgxType_recurse(GI->getOperand(0), analyzed);
 				}
 			}
 			else if (const BinaryOperator *BI = dyn_cast<BinaryOperator>(PI)) {
@@ -3433,6 +3435,12 @@ bool getSgxType_recurse(const Value *PtrV, std::set<const Instruction*> analyzed
 			sgx_type = false;
 		}
 		else {
+			if (ptr_md_node->getNumOperands() < 2) {
+				PI->dump();
+				errs() << "Now dumping entire function!\n";
+				PI->getParent()->getParent()->dump();
+				llvm_unreachable("PrtV Node with not enough md!");
+			}
 			MDString *ptr_type_string = dyn_cast<MDString>(ptr_md_node->getOperand(1).get());
 			sgx_type = ptr_type_string->getString().compare("private") == 0;
 		}
@@ -3462,8 +3470,23 @@ bool getSgxType_recurse(const Value *PtrV, std::set<const Instruction*> analyzed
 			sgx_type = ptr_type_string->getString().compare("private") == 0;
 		}
 	}
+	else if (const GlobalObject *GO = dyn_cast<GlobalObject>(PtrV)) {
+		MDNode *md_node = GO->getMetadata("sgx_type");
+		if (md_node) {
+			std::string type;
+			type = dyn_cast<MDString>(md_node->getOperand(1).get())->getString();
+			sgx_type = (type.compare("private")==0);
+		}
+		else {
+			sgx_type = false;
+		}
+	}
+	else if (const ConstantExpr *CE = dyn_cast<ConstantExpr>(PtrV)) {
+		sgx_type = getSgxType_recurse(CE->getOperand(0), analyzed);
+	}
 	else {
-		sgx_type = false;
+		PtrV->dump();
+		llvm_unreachable("Cant infer type for PtrV");
 	}
 	return sgx_type;
 }

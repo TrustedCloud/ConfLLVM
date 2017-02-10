@@ -200,10 +200,13 @@ namespace {
       (void) llvm::createFloat2IntPass();
       (void) llvm::createEliminateAvailableExternallyPass();
 
-	  (void) llvm::createAnnotationsInferencePass();
+	
 
       (void)new llvm::IntervalPartition();
       (void)new llvm::ScalarEvolutionWrapperPass();
+
+	  (void)llvm::createAnnotationsInferencePass();
+
       llvm::Function::Create(nullptr, llvm::GlobalValue::ExternalLinkage)->viewCFGOnly();
       llvm::RGPassManager RGM;
       llvm::TargetLibraryInfoImpl TLII;
@@ -213,6 +216,7 @@ namespace {
       X.add(nullptr, 0, llvm::AAMDNodes()); // for -print-alias-sets
       (void) llvm::AreStatisticsEnabled();
       (void) llvm::sys::RunningOnValgrind();
+	  
     }
   } ForcePassLinking; // Force link by creating a global definition.
 }

@@ -66,10 +66,28 @@ class DataLayout;
 class TargetMachine;
 
 /// This class is intended to be used as a driving class for all asm writers.
+
+typedef struct {
+	// mem access = base + stride * index + offset
+	unsigned base;
+	int stride;
+	unsigned index;
+} mem_reg_pair;
+
+typedef struct {
+	int min_access;
+	int max_access;
+	MachineInstr* MI;
+} mem_offset_pair;
+
+
 class AsmPrinter : public MachineFunctionPass {
 public:
-
+  		
   register_set_map start_set;
+  std::map<mem_reg_pair, mem_offset_pair> checked_offsets;
+  std::map<MachineInstr*, mem_offset_pair> closed_offset_pairs;
+
   /// Target machine description.
   ///
   TargetMachine &TM;

@@ -321,7 +321,6 @@ void ScheduleDAGRRList::Schedule() {
   DEBUG(dbgs()
         << "********** List Scheduling BB#" << BB->getNumber()
         << " '" << BB->getName() << "' **********\n");
-
   CurCycle = 0;
   IssueCount = 0;
   MinAvailableCycle = DisableSchedCycles ? 0 : UINT_MAX;

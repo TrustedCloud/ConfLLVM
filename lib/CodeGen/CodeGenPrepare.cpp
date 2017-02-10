@@ -3229,6 +3229,7 @@ bool AddressingModeMatcher::matchOperationAddr(User *AddrInst, unsigned Opcode,
     return matchScaledValue(AddrInst->getOperand(0), Scale, Depth);
   }
   case Instruction::GetElementPtr: {
+	  return false;
     // Scan the GEP.  We check it if it contains constant offsets and at most
     // one variable offset.
     int VariableOperand = -1;
