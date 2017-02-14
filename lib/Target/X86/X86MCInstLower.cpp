@@ -1423,7 +1423,7 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
 			  OutStreamer->EmitRawText("\tnotq\t%rax");
 			  MCInstBuilder MIB = MCInstBuilder(X86::CMP64mr).addReg(MI->getOperand(0).getReg()).addImm(0).addReg(X86::NoRegister).addImm(-8).addReg(X86::NoRegister).addReg(X86::RAX);
 			  OutStreamer->EmitInstruction(MIB, getSubtargetInfo());
-			  //OutStreamer->EmitRawText("\tjne\t__function_call_error2");
+			  OutStreamer->EmitRawText("\tjne\t__function_call_error2");
 		  }
 		  else {
 			  OutStreamer->EmitRawText("\tpushq\t%rbx");
@@ -1431,7 +1431,7 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
 			  OutStreamer->EmitRawText("\tmovabsq\t$"+std::to_string(~(0x9a9a9a9a9a9a9a00 + MI->call_arg_taint))+", %rbx");
 			  OutStreamer->EmitRawText("\tnotq\t%rbx");
 			  OutStreamer->EmitRawText("\tcmpq\t-8(%rax), %rbx");
-			 // OutStreamer->EmitRawText("\tjne\t__function_call_error2");
+			  OutStreamer->EmitRawText("\tjne\t__function_call_error2");
 			  OutStreamer->EmitRawText("\tpopq\t%rbx");
 		  }
 		  OutStreamer->EmitRawText("\tpopq\t%rax");
