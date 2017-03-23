@@ -264,6 +264,7 @@ public:
   bool addILPOpts() override;
   bool addPreISel() override;
   void addPreRegAlloc() override;
+  void addSgxMCPassFinal() override;
   void addPostRegAlloc() override;
   void addPreEmitPass() override;
   void addPreSched2() override;
@@ -324,6 +325,10 @@ void X86PassConfig::addPreRegAlloc() {
   addPass(createMachineInstPrint());
 }
 
+
+void X86PassConfig::addSgxMCPassFinal() {
+	addPass(createSgxMCPassFinal());
+}
 void X86PassConfig::addPostRegAlloc() {
   addPass(createX86FloatingPointStackifierPass());
 }

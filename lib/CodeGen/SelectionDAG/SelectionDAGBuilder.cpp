@@ -5922,13 +5922,18 @@ void SelectionDAGBuilder::LowerCallTo(ImmutableCallSite CS, SDValue Callee,
   for (ImmutableCallSite::arg_iterator i = CS.arg_begin(), e = CS.arg_end();
        i != e; ++i) {
     const Value *V = *i;
-	
-	MDNode *md_node = dyn_cast<MDNode>(func_md->getOperand(index).get());
-	std::string sgx_type_string = dyn_cast<MDString>(md_node->getOperand(0).get())->getString().str();
-	if (sgx_type_string.compare("private") == 0)
-		Entry.sgx_type = true;
-	else
+	if (index >= func_md->getNumOperands()) {
+		//CF->dump();
 		Entry.sgx_type = false;
+	}
+	else {
+		MDNode *md_node = dyn_cast<MDNode>(func_md->getOperand(index).get());
+		std::string sgx_type_string = dyn_cast<MDString>(md_node->getOperand(0).get())->getString().str();
+		if (sgx_type_string.compare("private") == 0)
+			Entry.sgx_type = true;
+		else
+			Entry.sgx_type = false;
+	}
 	index++;
     // Skip empty types
     if (V->getType()->isEmptyTy())

@@ -3443,20 +3443,35 @@ X86TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
     return DAG.getNode(X86ISD::TC_RETURN, dl, NodeTys, Ops);
   }
   ImmutableCallSite *CS = CLI.CS;
+	  
   const Instruction *CF = CS->getInstruction();
   MDNode *func_ret_md = CF->getMetadata("sgx_call_return_type");
   Chain = DAG.getNode(X86ISD::CALL, dl, NodeTys, Ops);
+  if (func_ret_md == NULL) {
+	  CF->dump();
+  }
+
   MDString *md_node = dyn_cast<MDString>(func_ret_md->getOperand(0).get());
   std::string sgx_type_string = md_node->getString().str();
   if (sgx_type_string.compare("private") == 0)
 	  Chain->register_sgx_type = 1;
   else
 	  Chain->register_sgx_type = 2;
-  if (CS->getCalledFunction())
+  const llvm::Value* CalledFunction = CS->getCalledValue();
+  if (dyn_cast<ConstantExpr>(CalledFunction)) {
+	  const llvm::ConstantExpr* CE = dyn_cast<ConstantExpr>(CalledFunction);
+	  if (CE->isCast()) {
+		  CalledFunction = CE->getOperand(0);
+	  }
+  }
+  
+  if (dyn_cast<Function>(CalledFunction))
 	  Chain->isIndirectCall = false;
   else
 	  Chain->isIndirectCall = true;
+
   Chain->call_arg_taint = getCallArgsTaint(CF);
+
   InFlag = Chain.getValue(1);
 
   // Create the CALLSEQ_END node.

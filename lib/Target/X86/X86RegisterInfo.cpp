@@ -47,6 +47,8 @@ static cl::opt<bool>
 EnableBasePointer("x86-use-base-pointer", cl::Hidden, cl::init(true),
           cl::desc("Enable use of a base pointer for complex stack frames"));
 
+static cl::opt<bool> NonMpxChecks("non-mpx-checks-reg", cl::desc("Generate non mpx checks(less effecient)"), cl::value_desc("bool"));
+
 X86RegisterInfo::X86RegisterInfo(const Triple &TT)
     : X86GenRegisterInfo((TT.isArch64Bit() ? X86::RIP : X86::EIP),
                          X86_MC::getDwarfRegFlavour(TT, false),
@@ -525,9 +527,14 @@ BitVector X86RegisterInfo::getReservedRegs(const MachineFunction &MF) const {
         Reserved.set(*AI);
     }
   }
-  for (MCSubRegIterator I(X86::R15, this, /*IncludeSelf=*/true); I.isValid();
-	  ++I)
-	  Reserved.set(*I);
+
+  if (NonMpxChecks) {
+	  for (MCSubRegIterator I(X86::R15, this, /*IncludeSelf=*/true); I.isValid();
+		  ++I)
+		  Reserved.set(*I);
+
+  }
+
   return Reserved;
 }
 

@@ -612,6 +612,9 @@ void TargetPassConfig::addMachinePasses() {
   if (!isPassSubstitutedOrOverridden(&PrologEpilogCodeInserterID))
       addPass(createPrologEpilogInserterPass(TM));
 
+  addSgxMCPassFinal();
+  
+
   /// Add passes that optimize machine instructions after register allocation.
   if (getOptLevel() != CodeGenOpt::None)
     addMachineLateOptimization();

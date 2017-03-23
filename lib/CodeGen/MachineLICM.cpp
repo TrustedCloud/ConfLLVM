@@ -1189,6 +1189,7 @@ MachineInstr *MachineLICM::ExtractHoistableLoad(MachineInstr *MI) {
   MachineBasicBlock::iterator Pos = MI;
   MBB->insert(Pos, NewMIs[0]);
   MBB->insert(Pos, NewMIs[1]);
+
   // If unfolding produced a load that wasn't loop-invariant or profitable to
   // hoist, discard the new instructions and bail.
   if (!IsLoopInvariantInst(*NewMIs[0]) || !IsProfitableToHoist(*NewMIs[0])) {
@@ -1202,6 +1203,7 @@ MachineInstr *MachineLICM::ExtractHoistableLoad(MachineInstr *MI) {
 
   // Otherwise we successfully unfolded a load that we can hoist.
   MI->eraseFromParent();
+  NewMIs[0]->sgx_type = MI->sgx_type;
   return NewMIs[0];
 }
 

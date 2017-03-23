@@ -499,12 +499,30 @@ bool X86AsmPrinter::PrintAsmMemoryOperand(const MachineInstr *MI,
 void PrintModuleMacros(llvm::MCStreamer *OutStreamer) {
 	
 	OutStreamer->EmitRawText("\t.macro\tswitch_to_original");
-	OutStreamer->EmitRawText("\txchgq\t%gs:0xe8, %rsp");
+	//OutStreamer->EmitRawText("\txchgq\t%gs:0xe8, %rsp");
+	//OutStreamer->EmitRawText("\txchgq\t%rsp, %xmm6");
+	//OutStreamer->EmitRawText("movq\t%rsp, %xmm5");
+	//OutStreamer->EmitRawText("movq\t%xmm6, %rsp");
+	//OutStreamer->EmitRawText("movq\t%xmm5, %xmm6");
+	
+	OutStreamer->EmitRawText("\tmovq\t%rsp, %r11");
+	OutStreamer->EmitRawText("\tmovq\t%gs:0xe8, %rsp");
+	OutStreamer->EmitRawText("\tmovq\t%r11, %gs:0xe8");
+	
 	OutStreamer->EmitRawText("\t.endm");
 
 	OutStreamer->EmitRawText("\t.macro\tswitch_to_shadow");
-	OutStreamer->EmitRawText("\txchgq\t%gs:0xe8, %rsp");
+	OutStreamer->EmitRawText("\tmovq\t%rsp, %r11");
+	OutStreamer->EmitRawText("\tmovq\t%gs:0xe8, %rsp");
+	OutStreamer->EmitRawText("\tmovq\t%r11, %gs:0xe8");
 	OutStreamer->EmitRawText("\t.endm");
+
+	OutStreamer->EmitRawText("\t.macro\tswitch_to_shadow_r11_safe");
+	OutStreamer->EmitRawText("\tmovq\t%rsp, %r10");
+	OutStreamer->EmitRawText("\tmovq\t%gs:0xe8, %rsp");
+	OutStreamer->EmitRawText("\tmovq\t%r10, %gs:0xe8");
+	OutStreamer->EmitRawText("\t.endm");
+
 
 	OutStreamer->EmitRawText("\t.macro\tsgx_public_check_macro module_num, line_num");
 	OutStreamer->EmitRawText("\tpushf");
@@ -703,6 +721,14 @@ void X86AsmPrinter::EmitEndOfAsmFile(Module &M) {
   }
 
 
+  OutStreamer->EmitRawText("\t.section\tprofdata");
+  for (auto function : profiler_function_labels) {
+	  OutStreamer->EmitRawText("\t.asciz\t\"" + function + "\"");
+	  OutStreamer->EmitRawText("__profiler_data_" + function + ":");
+	  OutStreamer->EmitRawText("\t.quad\t0");
+	  OutStreamer->EmitRawText("\t.quad\t0");
+  }
+
   OutStreamer->EmitRawText("\t.section\tsgx_flab");
   for (auto label : getFunctionMagicLabels()) {
 	  OutStreamer->EmitRawText("\t.quad\t" + label);
@@ -756,6 +782,39 @@ void X86AsmPrinter::EmitFunctionEntryLabel() {
 	OutStreamer->EmitRawText("\t.byte\t" + std::to_string(taint_flag));
 	OutStreamer->EmitRawText("\t.space\t7, 0x9a");
 	AsmPrinter::EmitFunctionEntryLabel();
+
+	std::string fname = MF->getName().str();
+
+	OutStreamer->EmitRawText("\tmovq\t%rdx, %r11");
+	OutStreamer->EmitRawText("\trdtsc");
+	OutStreamer->EmitRawText("\tmovabsq\t$__profiler_data_" + fname+", %r10");
+	OutStreamer->EmitRawText("\tmovl\t%eax, 8(%r10)");
+	OutStreamer->EmitRawText("\tmovl\t%edx, 12(%r10)");
+	OutStreamer->EmitRawText("\tmovq\t%r11, %rdx");
+
+	/*
+	OutStreamer->EmitRawText("\tmovq\t%gs:0x100, %r10");
+	
+	int i;
+	OutStreamer->EmitRawText("\tmovb\t$43, (%r10)");
+	int len = fname.length();
+	//errs() << "len of " << fname << " = " << len << "\n";
+	for (i = 0; i < len; i++) {
+		OutStreamer->EmitRawText("\tmovb\t$" + std::to_string((int)fname[i]) + ", " + std::to_string(i+1) + "(%r10)");
+	}
+	OutStreamer->EmitRawText("\tmovb\t$0, " + std::to_string(i+1) + "(%r10)");
+
+
+	OutStreamer->EmitRawText("\tmovq\t%rdx, %r11");
+	OutStreamer->EmitRawText("\trdtsc");
+	OutStreamer->EmitRawText("\tmovl\t%eax, " + std::to_string(i + 2) + "(%r10)");
+	OutStreamer->EmitRawText("\tmovl\t%edx, " + std::to_string(i + 6) + "(%r10)");
+	OutStreamer->EmitRawText("\tmovq\t%r11, %rdx");
+
+	OutStreamer->EmitRawText("\taddq\t$" + std::to_string(i + 10) + ", %gs:0x100");
+	*/
+
+	profiler_function_labels.push_back(fname);
 }
 //===----------------------------------------------------------------------===//
 // Target Registry Stuff

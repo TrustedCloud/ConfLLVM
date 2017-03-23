@@ -780,7 +780,14 @@ foldMemoryOperand(ArrayRef<std::pair<MachineInstr*, unsigned> > Ops,
   
   if (!FoldMI)
     return false;
-  FoldMI->sgx_type = realized_sgx_type;
+
+
+
+
+  if (LoadMI)
+	  FoldMI->sgx_type = LoadMI->sgx_type;
+  else
+	FoldMI->sgx_type = realized_sgx_type;
   // Remove LIS for any dead defs in the original MI not in FoldMI.
   for (MIBundleOperands MO(*MI); MO.isValid(); ++MO) {
     if (!MO->isReg())
@@ -829,6 +836,7 @@ foldMemoryOperand(ArrayRef<std::pair<MachineInstr*, unsigned> > Ops,
 
   DEBUG(dumpMachineInstrRangeWithSlotIndex(MIS.begin(), MIS.end(), LIS,
                                            "folded"));
+
 
   if (!WasCopy)
     ++NumFolded;

@@ -1995,6 +1995,9 @@ bool X86FrameLowering::restoreCalleeSavedRegisters(MachineBasicBlock &MBB,
 
     const TargetRegisterClass *RC = TRI->getMinimalPhysRegClass(Reg);
     TII.loadRegFromStackSlot(MBB, MI, Reg, CSI[i].getFrameIdx(), RC, TRI);
+	--MI;
+	MI->setFlag(MachineInstr::FrameDestroy);
+	++MI;
   }
 
   // POP GPRs.

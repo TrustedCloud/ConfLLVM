@@ -208,7 +208,9 @@ bool LiveRangeEdit::foldAsLoad(LiveInterval *LI,
   MachineInstr *FoldMI = TII.foldMemoryOperand(*UseMI, Ops, *DefMI, &LIS);
   if (!FoldMI)
     return false;
+  FoldMI->sgx_type = DefMI->sgx_type;
   DEBUG(dbgs() << "                folded: " << *FoldMI);
+  
   LIS.ReplaceMachineInstrInMaps(*UseMI, *FoldMI);
   UseMI->eraseFromParent();
   DefMI->addRegisterDead(LI->reg, nullptr);

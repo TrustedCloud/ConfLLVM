@@ -513,7 +513,7 @@ static void insertCSRSpillsAndRestores(MachineFunction &Fn,
         const TargetRegisterClass *RC = TRI->getMinimalPhysRegClass(Reg);
         TII.loadRegFromStackSlot(*MBB, I, Reg, CSI[i].getFrameIdx(), RC, TRI);
         assert(I != MBB->begin() &&
-               "loadRegFromStackSlot didn't insert any code!");
+			"loadRegFromStackSlot didn't insert any code!");
         // Insert in reverse order.  loadRegFromStackSlot can insert
         // multiple instructions.
         if (AtStart)
@@ -966,8 +966,10 @@ void PEI::calculateFrameObjectOffsets(MachineFunction &Fn) {
 /// prolog and epilog code to the function.
 ///
 void PEI::insertPrologEpilogCode(MachineFunction &Fn) {
-  const TargetFrameLowering &TFI = *Fn.getSubtarget().getFrameLowering();
 
+
+
+  const TargetFrameLowering &TFI = *Fn.getSubtarget().getFrameLowering();
   // Add prologue to the function...
   for (MachineBasicBlock *SaveBlock : SaveBlocks)
     TFI.emitPrologue(Fn, *SaveBlock);

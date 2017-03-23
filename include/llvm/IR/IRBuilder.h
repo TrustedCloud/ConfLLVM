@@ -105,7 +105,9 @@ public:
         DefaultOperandBundles(OpBundles) {
     ClearInsertionPoint();
   }
-
+  BasicBlock *getBB() {
+	  return BB;
+  }
   //===--------------------------------------------------------------------===//
   // Builder configuration methods
   //===--------------------------------------------------------------------===//

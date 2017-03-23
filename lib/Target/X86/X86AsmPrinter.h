@@ -30,6 +30,9 @@ class LLVM_LIBRARY_VISIBILITY X86AsmPrinter : public AsmPrinter {
   StackMaps SM;
   FaultMaps FM;
   std::unique_ptr<MCCodeEmitter> CodeEmitter;
+  
+  std::vector<std::string> profiler_function_labels;
+
   int sgx_function_magic_labels_index;
   int sgx_call_magic_labels_index;
 

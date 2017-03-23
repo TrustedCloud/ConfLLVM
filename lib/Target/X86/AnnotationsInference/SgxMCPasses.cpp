@@ -46,15 +46,63 @@ namespace {
 				}
 			}
 		}
-
+	
 		bool runOnMachineFunction(MachineFunction &MF) {
 			removeCall64m(MF);
 			return true;
 		}
 	};
 	char SgxMCPasses::ID = 0;
-}
 
+	class SgxMCPassFinal : public MachineFunctionPass {
+	public:
+		static char ID;
+		SgxMCPassFinal() : MachineFunctionPass(ID) {}
+		void fixXMMSave(MachineFunction &MF) {
+			int countXMM = 0;
+			for (MachineFunction::iterator BBi = MF.begin(); BBi != MF.end(); BBi++) {
+				for (MachineBasicBlock::iterator MCi = BBi->begin(); MCi != BBi->end(); MCi++) {
+					if (MCi->getOpcode() == X86::MOVAPSmr && (MCi->getFlags() & MachineInstr::FrameSetup)) {
+						countXMM++;
+					}
+				}
+			}
+			countXMM--;
+			for (MachineFunction::iterator BBi = MF.begin(); BBi != MF.end(); BBi++) {
+				for (MachineBasicBlock::iterator MCi = BBi->begin(); MCi != BBi->end(); MCi++) {
+					if (MCi->getOpcode() == X86::MOVAPSmr && (MCi->getFlags() & MachineInstr::FrameSetup)) {
+						assert(MCi->getOperand(3).isImm());
+						MCi->getOperand(3).setImm(countXMM * 16);
+						countXMM--;
+					}
+				}
+			}
+		}
+
+		void fixXMMRestore(MachineFunction &MF) {
+			int countXMM = 0;
+			for (MachineFunction::iterator BBi = MF.begin(); BBi != MF.end(); BBi++) {
+				for (MachineBasicBlock::iterator MCi = BBi->begin(); MCi != BBi->end(); MCi++) {
+					if (MCi->getOpcode() == X86::MOVAPSrm && (MCi->getFlags() & MachineInstr::FrameDestroy)) {
+						assert(MCi->getOperand(4).isImm());
+						MCi->getOperand(4).setImm(countXMM * 16);
+						countXMM++;
+					}
+				}
+			}
+		}
+		bool runOnMachineFunction(MachineFunction &MF) {
+			//fixXMMSave(MF);
+			//fixXMMRestore(MF);
+			return true;
+		}
+	};
+	char SgxMCPassFinal::ID = 0;
+}
 FunctionPass *llvm::createSgxMCPass() {
 	return new SgxMCPasses();
+}
+
+FunctionPass *llvm::createSgxMCPassFinal() {
+	return new SgxMCPassFinal();
 }

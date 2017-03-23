@@ -344,6 +344,9 @@ protected:
   /// register allocation pass pipeline but before prolog-epilog insertion.
   virtual void addPostRegAlloc() { }
 
+
+  virtual void addSgxMCPassFinal() { }
+
   /// Add passes that optimize machine instructions after register allocation.
   virtual void addMachineLateOptimization();
 

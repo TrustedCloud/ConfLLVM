@@ -97,7 +97,7 @@ namespace {
 
 			z3::expr true_const = func_context.bool_val(true);
 			z3::expr false_const = func_context.bool_val(false);
-
+			
 			std::map<std::string, z3::expr> variables;
 			std::map<std::string, int> variables_depth;
 
@@ -260,6 +260,7 @@ namespace {
 				BasicBlock &BB = *BBi;
 				for (BasicBlock::iterator Ii = BB.begin(); Ii != BB.end(); Ii++) {
 					Instruction &I = *Ii;
+					//Ii->dump();
 					if (I.getOpcode() == Instruction::Load) {
 						std::string var_name = I.getName().str();
 						std::string arg_name = opActual(I.getOperand(0))->getName().str();
@@ -388,28 +389,34 @@ namespace {
 						}
 						
 						for (CallInst::op_iterator Oi = CI->arg_begin(); Oi != CI->arg_end(); Oi++) {
-							
+
 							std::string op_name = opActual(*Oi)->getName();
 							if (isa<GlobalObject>(opActual(*Oi))) {
 								op_name = "@" + op_name;
 							}
-							if (op_name.compare("")==0) {
+							if (op_name.compare("") == 0) {
 								SKIP_DEBUG(errs() << "Skipping ";
 								opActual(*Oi)->dump();)
-								index++;
+									index++;
 								continue;
 							}
 							int op_depth = variables_depth[op_name];
+							MDNode* arg_md;
 							if (func_md->getNumOperands() <= index) {
 								///TODO: NEED TO FIX THIS 
-								errs() << "Overflow in operands!\n";
-								CI->dump();
-								continue;
+								//errs() << "Overflow in operands, assuming var args with public type !\n";
+								//CI->dump();
+								//	continue;
+								type = "public";
+								op_depth = 1;
 							}
-							MDNode* arg_md = dyn_cast<MDNode>(func_md->getOperand(index).get());
-							int md_depth = arg_md->getNumOperands();
-							op_depth = op_depth < md_depth ? op_depth : md_depth;
-							type = dyn_cast<MDString>(arg_md->getOperand(0).get())->getString();	
+							else {
+								arg_md = dyn_cast<MDNode>(func_md->getOperand(index).get());
+								int md_depth = arg_md->getNumOperands();
+								op_depth = op_depth < md_depth ? op_depth : md_depth;
+								type = dyn_cast<MDString>(arg_md->getOperand(0).get())->getString();
+							}
+
 							if (type.compare("public") == 0) {
 								z3::expr condition = implies(variables.find(op_name)->second, false_const);
 								func_solver.add(condition);
@@ -491,16 +498,27 @@ namespace {
 						}
 					}
 					else if (GetElementPtrInst *GI = dyn_cast<GetElementPtrInst>(Ii)) {
-						Type *ty = opActual(GI->getOperand(0))->getType();
+						//GI->dump();
+						//Type *ty = opActual(GI->getOperand(0))->getType();
+						Type *ty = GI->getOperand(0)->getType();
 						std::string result = GI->getName().str();
 						std::string param = opActual(GI->getOperand(0))->getName();
+						if (dyn_cast<ConstantPointerNull>(opActual(GI->getOperand(0)))) {
+							continue;
+						}
 						if (isa<GlobalObject>(opActual(I.getOperand(0)))) {
 							param = "@" + param;
 						}
 						
+						if (ty->getPointerElementType()->isStructTy()) {
+							if (dyn_cast<StructType>(ty->getPointerElementType())->isLiteral() && dyn_cast<ConstantExpr>(GI->getOperand(0)) && dyn_cast<ConstantExpr>(GI->getOperand(0))->isCast()) {
+								ty = dyn_cast<ConstantExpr>(GI->getOperand(0))->getType();
+							}
+						}
+
 						if (GI->getNumIndices() == 2 && ty->getPointerElementType()->isStructTy()) {
-
-
+							
+							//ty->getPointerElementType()->dump();
 							if (opActual(GI->getOperand(1))->getName().str().compare("") != 0) {
 								
 								std::string arg1_name = opActual(GI->getOperand(1))->getName().str();
@@ -515,15 +533,20 @@ namespace {
 								opActual(GI->getOperand(1))->dump();)
 							}
 							std::string struct_name = ty->getPointerElementType()->getStructName().str();
-							z3::expr condition = variables.find(result)->second == variables.find(param)->second;
-							func_solver.add(condition);
+							
+							//z3::expr condition = variables.find(result)->second == variables.find(param)->second;
+							//func_solver.add(condition);
+							insert_implies_only(param, result, 0, 0, variables, variables_depth, func_solver);
+							
 							z3::expr condition2 = variables.find(result + "$p")->second == variables.find(param + "$p")->second;
 							func_solver.add(condition2);
 							int res_depth = variables_depth[result];
 							result = result + "$p";
 							param = param + "$p";
 
-							if (res_depth > 2) {	
+
+
+							if (res_depth > 2 && strncmp(struct_name.c_str(), "union.", strlen("union."))    ) {
 								Module* module = GI->getModule();
 								NamedMDNode *md = module->getNamedMetadata("struct_sgx_type");
 								MDNode *struct_md;
@@ -535,8 +558,10 @@ namespace {
 										break;
 									}
 								}
+
 								int f_id = dyn_cast<ConstantInt>(GI->idx_end()-1)->getZExtValue();
-								MDNode *field_md = dyn_cast<MDNode>(struct_md->getOperand(f_id).get());		
+								MDNode *field_md = dyn_cast<MDNode>(struct_md->getOperand(f_id).get());	
+								
 								for (int i = 2; i < res_depth; i++) {
 									bool sgx_type;
 									std::string sgx_string = dyn_cast<MDString>(field_md->getOperand(i-2).get())->getString().str();

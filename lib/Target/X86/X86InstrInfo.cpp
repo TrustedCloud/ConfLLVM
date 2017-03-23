@@ -6749,6 +6749,7 @@ bool X86InstrInfo::unfoldMemoryOperand(
       }
     }
   }
+  NewMIs[0]->sgx_type = MI.sgx_type;
 
   // Emit the data processing instruction.
   MachineInstr *DataMI = MF.CreateMachineInstr(MCID, MI.getDebugLoc(), true);
@@ -6871,7 +6872,7 @@ X86InstrInfo::unfoldMemoryOperand(SelectionDAG &DAG, SDNode *N,
     // Preserve memory reference information.
     cast<MachineSDNode>(Load)->setMemRefs(MMOs.first, MMOs.second);
   }
-
+  Load->sgx_type = N->sgx_type;
   // Emit the data processing instruction.
   std::vector<EVT> VTs;
   const TargetRegisterClass *DstRC = nullptr;

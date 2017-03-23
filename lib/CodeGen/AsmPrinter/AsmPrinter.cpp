@@ -414,7 +414,10 @@ void AsmPrinter::EmitGlobalVariable(const GlobalVariable *GV) {
   }
 
   // Handle common symbols
-  if (GVKind.isCommon()) {
+
+  //DISABLE USE OF COMMON, let it go out as public/private
+
+  if (GVKind.isCommon() && false) {
     if (Size == 0) Size = 1;   // .comm Foo, 0 is undefined, avoid it.
     unsigned Align = 1 << AlignLog;
     if (!getObjFileLowering().getCommDirectiveSupportsAlignment())
