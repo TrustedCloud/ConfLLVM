@@ -736,12 +736,20 @@ static void dumpMachineInstrRangeWithSlotIndex(MachineBasicBlock::iterator B,
 bool InlineSpiller::
 foldMemoryOperand(ArrayRef<std::pair<MachineInstr*, unsigned> > Ops,
                   MachineInstr *LoadMI) {
+
+
+  
+
+
   if (Ops.empty())
     return false;
   // Don't attempt folding in bundles.
   MachineInstr *MI = Ops.front().first;
   if (Ops.back().first != MI || MI->isBundled())
     return false;
+
+  if (MI->isCall())
+	  return false;
 
   bool WasCopy = MI->isCopy();
   unsigned ImpReg = 0;
@@ -773,6 +781,7 @@ foldMemoryOperand(ArrayRef<std::pair<MachineInstr*, unsigned> > Ops,
   }
 
   MachineInstrSpan MIS(MI);
+
 
   MachineInstr *FoldMI =
       LoadMI ? TII.foldMemoryOperand(*MI, FoldOps, *LoadMI, &LIS)

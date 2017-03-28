@@ -45,6 +45,8 @@ namespace llvm {
 		if (MI->isCall()) {
 			if (MI->getFlags() & MachineInstr::FrameSetup)
 				return 2;
+			MI->getParent()->getParent()->dump();
+			MI->dump();
 			llvm_unreachable("This shouldn't happen (Call without register_sgx_type)!");
 		}
 

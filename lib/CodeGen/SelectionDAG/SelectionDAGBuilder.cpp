@@ -3437,7 +3437,7 @@ bool getSgxType_recurse(const Value *PtrV, std::set<const Instruction*> analyzed
 		else {
 			if (ptr_md_node->getNumOperands() < 2) {
 				PI->dump();
-				errs() << "Now dumping entire function!\n";
+				//errs() << "Now dumping entire function!\n";
 				PI->getParent()->getParent()->dump();
 				llvm_unreachable("PrtV Node with not enough md!");
 			}
@@ -3571,8 +3571,22 @@ void SelectionDAGBuilder::visitLoad(const LoadInst &I) {
   SDValue Ptr = getValue(SV);
 
   Type *Ty = I.getType();
+  
+  ////NOTE USING TYPE FROM LOAD INSTEAD OF POINTER. NEED TO CHECK
+  bool sgx_type;
+  
+  MDNode *func_md = I.getMetadata("sgx_type");
+  if (!func_md) {
+	  errs() << "No MD found!\n";
+	  I.dump();
+	  sgx_type = false;
+  }
+  else {
+	  MDString *ptr_type_string = dyn_cast<MDString>(func_md->getOperand(0).get());
+	  sgx_type = ptr_type_string->getString().compare("private") == 0;
+  }
 
-  bool sgx_type = getSgxType(SV);
+  //bool sgx_type = getSgxType(SV);
   bool isVolatile = I.isVolatile();
   bool isNonTemporal = I.getMetadata(LLVMContext::MD_nontemporal) != nullptr;
 
