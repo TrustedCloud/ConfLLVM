@@ -35,7 +35,7 @@ class LLVM_LIBRARY_VISIBILITY X86AsmPrinter : public AsmPrinter {
 
   int sgx_function_magic_labels_index;
   int sgx_call_magic_labels_index;
-
+  unsigned int shadow_stack_push_count;
   void sgxFunctionMagicReset() {
 	  sgx_function_magic_labels_index = 0;
   }

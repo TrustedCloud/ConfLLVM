@@ -34,6 +34,7 @@ namespace llvm {
 	}
 
 	int inferTaintForInstruction(const MachineInstr* MI, register_set private_set) {
+		const TargetRegisterInfo *TRI = MI->getParent()->getParent()->getSubtarget().getRegisterInfo();
 		if (MI->getFlags() & MachineInstr::FrameDestroy)
 			return 0;
 		if (MI->register_sgx_type != 0)
@@ -45,22 +46,23 @@ namespace llvm {
 		if (MI->isCall()) {
 			if (MI->getFlags() & MachineInstr::FrameSetup)
 				return 2;
-			MI->getParent()->getParent()->dump();
-			MI->dump();
+			//MI->getParent()->getParent()->dump();
+			//MI->dump();
 			llvm_unreachable("This shouldn't happen (Call without register_sgx_type)!");
 		}
-
+		
 		/* Special cases*/
 		if (MI->getOpcode() == X86::XOR16rr || MI->getOpcode() == X86::XOR32rr || MI->getOpcode() == X86::XOR64rr || MI->getOpcode() == X86::XOR8rr) {
 			if (MI->uses().begin()->getReg() == (MI->uses().begin() + 1)->getReg())
 				return 2;
 		}
+		MI->dump();
 		/*Special cases*/
 		
 		if (MI->mayLoad() && MI->sgx_type == 1)
 			return 1;
 		for (auto OP = MI->uses().begin(); OP != MI->uses().end(); OP++) {
-			if (OP->isReg() && OP->getReg() != X86::EFLAGS && OP->getReg() != X86::RSP && OP->getReg() != X86::NoRegister) {
+			if (OP->isReg() && OP->getReg() != X86::EFLAGS && OP->getReg() != X86::RSP && OP->getReg() != X86::NoRegister && MI->readsRegister(OP->getReg(), TRI)) {
 				if (private_set.find(OP->getReg()) != private_set.end()) {
 					return 1;
 				}
@@ -99,7 +101,10 @@ namespace llvm {
 			
 			
 			if (isDef) {
+
+				
 				int taint = inferTaintForInstruction(MI.getInstrIterator().getNodePtrUnchecked(), temp_set);
+				
 				for (int i = 0; i < defRegs.size(); i++) {
 					unsigned defReg = defRegs[i];
 					if (taint == 1) {
@@ -118,6 +123,15 @@ namespace llvm {
 					}
 				}
 			}
+			if (MI->isCall()) {
+				// Kill the registers - rcx, rdx, r8, r9, r10, r11, xmm0, xmm1, xmm2, xmm3, xmm4, xmm5 (make private)
+				unsigned clear_set[] = { X86::RCX, X86::RDX, X86::R8, X86::R9/*, X86::R10, X86::R11, X86::XMM0, X86::XMM1, X86::XMM2, X86::XMM3, X86::XMM4, X86::XMM5 */};
+				for (int i = 0; i < sizeof(clear_set) / sizeof(clear_set[0]); i++) {
+					for (MCRegAliasIterator alias(clear_set[i], TRI, true); alias.isValid(); ++alias)
+						temp_set.insert(*alias);
+				}
+			}
+
 			if (OMI == MI.getInstrIterator().getNodePtrUnchecked()) {
 				if (temp_set.find(OReg) == temp_set.end()) {
 					return_taint = 2;
@@ -174,6 +188,17 @@ namespace llvm {
 	}
 
 	int inferTaintForCodeGen(const MachineInstr *OMI, unsigned OReg, register_set private_set) {
+
+
+		if (OMI == NULL) {
+			if (private_set.find(OReg) == private_set.end()) {
+				return 2;
+			}
+			else {
+				return 1;
+			}
+		}
+
 		INFER_DEBUG(errs() << "Entering infer for code gen\n";)
 		int final_taint = -1;
 		

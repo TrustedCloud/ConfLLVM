@@ -310,14 +310,16 @@ bool X86PassConfig::addPreISel() {
 }
 
 void X86PassConfig::addPreRegAlloc() {
+	
   if (GenerateSgxCode) {
 	  addPass(createSgxMCPass());
+	  addPass(createX86WinAllocaExpander());
 		return;
   }
   if (getOptLevel() != CodeGenOpt::None) {
-    addPass(createX86FixupSetCC());
-    addPass(createX86OptimizeLEAs());
-    addPass(createX86CallFrameOptimization());
+	  addPass(createX86FixupSetCC());
+	  addPass(createX86OptimizeLEAs());
+	  addPass(createX86CallFrameOptimization());
   }
 
   addPass(createX86WinAllocaExpander());

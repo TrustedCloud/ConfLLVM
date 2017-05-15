@@ -2989,15 +2989,33 @@ static SDValue getMOVL(SelectionDAG &DAG, const SDLoc &dl, MVT VT, SDValue V1,
 int getCallArgsTaint(const llvm::Instruction* I) {
 	int final_taint = 0;
 	MDNode* func_md = I->getMetadata("sgx_call_type");
-	for(int i = 0 ; i < 4; i++)
-		if (func_md->getNumOperands() > i) {
-			MDNode *arg_node = dyn_cast<MDNode>(func_md->getOperand(i).get());
-			MDString *sgx_type = dyn_cast<MDString>(arg_node->getOperand(0).get());
-			if (sgx_type->getString().str().compare("private") == 0)
-				final_taint |= (1 << (3 - i));
+	bool isVaradic = dyn_cast<CallInst>(I)->getFunctionType()->isVarArg();
+	const FunctionType *ftype = dyn_cast<CallInst>(I)->getFunctionType();
+	//I->dump();
+	//errs() << "isVariadic = " << isVaradic << ", num args (fixed) = " << ftype->getNumParams() << "\n";
+	//ftype->dump();
+	if (ftype->getNumParams() == 0 && isVaradic) {
+		//SPECIAL CASE  of function being declared as int foo(); Signature to be generated according to actual number of args being passed
+		int passed_args = dyn_cast<CallInst>(I)->getNumArgOperands();
+		if (passed_args > 4)
+			passed_args = 4;
+		for (int i = 0; i < passed_args; i++) {
+			final_taint |= (1 << (3 - i));
 		}
-		else
-			final_taint |= (1 << (3-i));
+	}
+	else {
+		for (int i = 0; i < 4; i++)
+			if (func_md->getNumOperands() > i) {
+				MDNode *arg_node = dyn_cast<MDNode>(func_md->getOperand(i).get());
+				MDString *sgx_type = dyn_cast<MDString>(arg_node->getOperand(0).get());
+				if (sgx_type->getString().str().compare("private") == 0)
+					final_taint |= (1 << (3 - i));
+			}
+			else {
+				if (!isVaradic)
+					final_taint |= (1 << (3 - i));
+			}
+	}
 	MDNode *ret_md = I->getMetadata("sgx_call_return_type");
 	if (ret_md->getNumOperands() > 0) {
 		MDString *sgx_type = dyn_cast<MDString>(ret_md->getOperand(0).get());
@@ -3442,6 +3460,8 @@ X86TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
     MF.getFrameInfo().setHasTailCall();
     return DAG.getNode(X86ISD::TC_RETURN, dl, NodeTys, Ops);
   }
+
+  Chain = DAG.getNode(X86ISD::CALL, dl, NodeTys, Ops);
 
   ImmutableCallSite *CS = CLI.CS;
 

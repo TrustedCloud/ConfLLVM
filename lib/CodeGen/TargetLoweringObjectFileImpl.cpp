@@ -355,6 +355,7 @@ bool TargetLoweringObjectFileELF::shouldPutJumpTableInFunctionSection(
 MCSection *TargetLoweringObjectFileELF::getSectionForConstant(
     const DataLayout &DL, SectionKind Kind, const Constant *C,
     unsigned &Align) const {
+	return GlobalsRelocatedPublic;
   if (Kind.isMergeableConst4() && MergeableConst4Section)
     return MergeableConst4Section;
   if (Kind.isMergeableConst8() && MergeableConst8Section)
@@ -657,6 +658,7 @@ MCSection *TargetLoweringObjectFileMachO::getSectionForConstant(
     unsigned &Align) const {
   // If this constant requires a relocation, we have to put it in the data
   // segment, not in the text segment.
+	return GlobalsRelocatedPublic;
   if (Kind.isData() || Kind.isReadOnlyWithRel())
     return ConstDataSection;
 
@@ -982,7 +984,10 @@ MCSection *TargetLoweringObjectFileCOFF::SelectSectionForGlobal(
   const GlobalVariable *GVar = dyn_cast<GlobalVariable>(GV);
  // GV->dump();
   if (GVar) {
+
 	  MDNode *md_node = GVar->getMetadata("sgx_type");
+	  if (!md_node)
+		  return GlobalsRelocatedPublic;
 	  std::string type = dyn_cast<MDString>(md_node->getOperand(1).get())->getString();
 	  if (type.compare("public") == 0)
 		  return GlobalsRelocatedPublic;

@@ -243,6 +243,7 @@ void X86WinAllocaExpander::lower(MachineInstr* MI, Lowering L) {
     BuildMI(*MBB, MI, DL, TII->get(TargetOpcode::COPY), RegA)
         .addReg(MI->getOperand(0).getReg());
 
+
     // Do the probe.
     STI->getFrameLowering()->emitStackProbe(*MBB->getParent(), *MBB, MI, DL,
                                             /*InPrologue=*/false);

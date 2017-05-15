@@ -4634,6 +4634,7 @@ SDValue SelectionDAG::getMemcpy(SDValue Chain, const SDLoc &dl, SDValue Dst,
   // Then check to see if we should lower the memcpy with target-specific
   // code. If the target chooses to do this, this is the next best.
   if (TSI) {
+	 
     SDValue Result = TSI->EmitTargetCodeForMemcpy(
         *this, dl, Chain, Dst, Src, Size, Align, isVol, AlwaysInline,
         DstPtrInfo, SrcPtrInfo);
@@ -4658,7 +4659,7 @@ SDValue SelectionDAG::getMemcpy(SDValue Chain, const SDLoc &dl, SDValue Dst,
   // respect volatile, so they may do things like read or write memory
   // beyond the given memory regions. But fixing this isn't easy, and most
   // people don't care.
-
+  
   // Emit a library call.
   TargetLowering::ArgListTy Args;
   TargetLowering::ArgListEntry Entry;

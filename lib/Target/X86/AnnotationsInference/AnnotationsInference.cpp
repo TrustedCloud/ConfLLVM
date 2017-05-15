@@ -13,6 +13,7 @@
 using namespace llvm;
 
 #define SKIP_DEBUG(x) 
+static cl::opt<std::string> lfFileName("lf-filename", cl::init(""));
 
 namespace {
 	struct AnnotationsInference : public FunctionPass {
@@ -90,6 +91,7 @@ namespace {
 			return false;
 		}
 		bool runOnFunction(Function &F) override {
+			
 			//errs() << "Inferring annotations for : " << F.getName() << "\n";
 			z3::context func_context;
 			z3::solver func_solver(func_context);
@@ -191,6 +193,7 @@ namespace {
 
 
 			int arg_order = 0;
+			//errs() << F.getName().str() << "\n";
 			for (Function::arg_iterator Ai = F.arg_begin(); Ai != F.arg_end(); Ai++) {
 				MDNode *md_node = dyn_cast<MDNode>(F.getMetadata("sgx_type")->getOperand(arg_order).get());
 				arg_order++;
@@ -598,10 +601,10 @@ namespace {
 						else {
 							z3::expr condition = variables.find(result)->second == variables.find(param)->second;
 							insert_implies(param, result, 0, 0, variables, variables_depth, func_solver);
-							for (unsigned int i = 1; i < GI->getNumIndices(); i++) {
-								if (opActual(GI->getOperand(i))->getName().str().compare("") != 0) {
-									std::string arg1_name = opActual(GI->getOperand(1))->getName().str();
-									if (isa<GlobalObject>(opActual(GI->getOperand(1)))) {
+							for (unsigned int i = 0; i < GI->getNumIndices(); i++) {
+								if (opActual(GI->getOperand(i+1))->getName().str().compare("") != 0) {
+									std::string arg1_name = opActual(GI->getOperand(i+1))->getName().str();
+									if (isa<GlobalObject>(opActual(GI->getOperand(i+1)))) {
 										arg1_name = "@" + arg1_name;
 									}
 									std::string var_name = GI->getName().str();
@@ -705,7 +708,7 @@ namespace {
 			
 			bool solved = func_solver.check();
 			if (solved == false) {
-				llvm_unreachable("No solution for annotations inference. Check for invalid assignments!\n");
+				llvm_unreachable(("No solution for annotations inference in function "+F.getName().str()+". Check for invalid assignments!\n").c_str());
 				return false;
 			}
 			(void)solved;
@@ -753,8 +756,49 @@ namespace {
 					I.setMetadata("sgx_type", md_node);
 				}
 			}
-			
+			static int printed = false;
+			if (printed)
+				return false;
+			NamedMDNode *func_md = module->getNamedMetadata("func_sgx_type");
+			if (func_md == NULL)
+				return false;
+			printed = true;
+			if (lfFileName.compare("") == 0)
+				return false;
+			std::fstream lf_file;
+			lf_file.open(lfFileName.c_str(), std::ios::out);
+			for (int i = 0; i < func_md->getNumOperands(); i++) {
+				
+				MDNode *md_entry = func_md->getOperand(i);
+				std::string fname = dyn_cast<MDString>(md_entry->getOperand(0))->getString().str();
+				if (module->getNamedValue(fname) == NULL)
+					continue;
+				MDNode* args = dyn_cast<MDNode>(md_entry->getOperand(1));
+				MDNode* ret_md = dyn_cast<MDNode>(md_entry->getOperand(2));
+				lf_file << dyn_cast<MDString>(ret_md->getOperand(0))->getString().str() << "\t";
+				lf_file << fname << "\t";
+				int num_args = ((args->getNumOperands()) < 4) ? args->getNumOperands() : 4;
+				
+				Function *func = dyn_cast<Function>(module->getNamedValue(fname));
+				if (func->isVarArg())
+					num_args = 4;
+				for (int j = 0; j < num_args; j++) {
+					if (j>=args->getNumOperands())
+						lf_file << "public";
+					else {
+						MDNode *arg_md = dyn_cast<MDNode>(args->getOperand(j));
+						lf_file << dyn_cast<MDString>(arg_md->getOperand(0))->getString().str();
+					}
+						
+					if (j != num_args-1)
+						lf_file << ", ";
+				}
+				lf_file << "\t" << (func->isVarArg() ? 16 : args->getNumOperands()) << "\n";
+			}
+			lf_file.close();
+
 			return false;
+			
 		}
 		virtual void getAnalysisUsage(AnalysisUsage& Info) {
 			Info.setPreservesAll();

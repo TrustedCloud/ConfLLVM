@@ -273,6 +273,7 @@ bool TargetLoweringObjectFile::shouldPutJumpTableInFunctionSection(
 MCSection *TargetLoweringObjectFile::getSectionForConstant(
     const DataLayout &DL, SectionKind Kind, const Constant *C,
     unsigned &Align) const {
+	return GlobalsRelocatedPublic;
   if (Kind.isReadOnly() && ReadOnlySection != nullptr)
     return ReadOnlySection;
 

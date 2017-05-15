@@ -751,6 +751,7 @@ MachineInstr *X86FrameLowering::emitStackProbeCall(
   } else {
     CI = BuildMI(MBB, MBBI, DL, TII.get(CallOp)).addExternalSymbol(Symbol);
   }
+  CI->setFlags(CI->getFlags() | MachineInstr::FrameSetup);
 
   unsigned AX = Is64Bit ? X86::RAX : X86::EAX;
   unsigned SP = Is64Bit ? X86::RSP : X86::ESP;
@@ -1617,13 +1618,14 @@ void X86FrameLowering::emitEpilogue(MachineFunction &MF,
     if (LEAAmount != 0) {
       unsigned Opc = getLEArOpcode(Uses64BitFramePtr);
       addRegOffset(BuildMI(MBB, MBBI, DL, TII.get(Opc), StackPtr),
-                   FramePtr, false, LEAAmount);
+                   FramePtr, false, LEAAmount).setMIFlag(MachineInstr::FrameDestroy);
       --MBBI;
     } else {
       unsigned Opc = (Uses64BitFramePtr ? X86::MOV64rr : X86::MOV32rr);
       BuildMI(MBB, MBBI, DL, TII.get(Opc), StackPtr)
         .addReg(FramePtr);
       --MBBI;
+	  MBBI->setFlags(MBBI->getFlags() | MachineInstr::FrameDestroy);
     }
   } else if (NumBytes || true) {
     // Adjust stack pointer back: ESP += numbytes.

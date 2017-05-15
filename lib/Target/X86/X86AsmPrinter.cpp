@@ -495,20 +495,29 @@ bool X86AsmPrinter::PrintAsmMemoryOperand(const MachineInstr *MI,
   return false;
 }
 
+#define INS(x) "\t" x "\n"
+#define INSOP(x,y) "\t" x "\t" y "\n"
 
 void PrintModuleMacros(llvm::MCStreamer *OutStreamer) {
-	
+
 	OutStreamer->EmitRawText("\t.macro\tswitch_to_original");
 	//OutStreamer->EmitRawText("\txchgq\t%gs:0xe8, %rsp");
 	//OutStreamer->EmitRawText("\txchgq\t%rsp, %xmm6");
 	//OutStreamer->EmitRawText("movq\t%rsp, %xmm5");
 	//OutStreamer->EmitRawText("movq\t%xmm6, %rsp");
 	//OutStreamer->EmitRawText("movq\t%xmm5, %xmm6");
-	
+
 	OutStreamer->EmitRawText("\tmovq\t%rsp, %r11");
 	OutStreamer->EmitRawText("\tmovq\t%gs:0xe8, %rsp");
 	OutStreamer->EmitRawText("\tmovq\t%r11, %gs:0xe8");
-	
+
+	OutStreamer->EmitRawText("\t.endm");
+
+	OutStreamer->EmitRawText("\t.macro\tswitch_to_shadow_dummy");
+	OutStreamer->EmitRawText("\tmovq\t%rsp, %r11");
+	OutStreamer->EmitRawText("\tmovq\t%r11, %gs:0xe8");
+	OutStreamer->EmitRawText("\tmovq\t%gs:0xe8, %rsp");
+
 	OutStreamer->EmitRawText("\t.endm");
 
 	OutStreamer->EmitRawText("\t.macro\tswitch_to_shadow");
@@ -532,7 +541,7 @@ void PrintModuleMacros(llvm::MCStreamer *OutStreamer) {
 	OutStreamer->EmitRawText("\tpushq\t\\module_num");
 	OutStreamer->EmitRawText("\tpushq\t\\line_num");
 	OutStreamer->EmitRawText("\tmovabsq\t$0x810000000, %rax");
-	OutStreamer->EmitRawText("\tcmp\t%rax, %r15");	
+	OutStreamer->EmitRawText("\tcmp\t%rax, %r15");
 	OutStreamer->EmitRawText("\tjb\t_violation2");
 	OutStreamer->EmitRawText("\tmovabsq\t$0x820000000, %rax");
 	OutStreamer->EmitRawText("\tcmp\t%r15, %rax");
@@ -559,6 +568,54 @@ void PrintModuleMacros(llvm::MCStreamer *OutStreamer) {
 	OutStreamer->EmitRawText("\tmovq\t%gs:0xf0, %rax");
 	OutStreamer->EmitRawText("\tpopf");
 	OutStreamer->EmitRawText("\t.endm");
+
+
+	// Macro shadow_stack_enter for shadow stack implementation that does not switch the stack but only saves the return address on a separate stack
+	OutStreamer->EmitRawText(
+		INS(".macro shadow_stack_enter")
+		INS("subq\t$8, %gs:0xe8")
+		INS("movq\t%gs:0xe8, %r11")
+		INS("movq\t(%rsp), %r10")
+		INS("movq\t%r10, (%r11)")
+		INS(".endm")
+	);
+	// end of shadow_stack_enter
+
+	//Macro shadow_stack_enter_callee_save for shadow stack implementation that does not switch the stack but only saves the return address and the callee saved registers on a separate stack
+	OutStreamer->EmitRawText(
+		INS(".macro shadow_stack_enter_callee_save")
+		INS("movq\t%gs:0xe8, %r11")
+		INS("movq\t(%rsp), %r10")
+		INS("movq\t%r10, -8(%r11)")
+		INS(".endm")
+	);
+	//end of shadow_stack_enter_callee_save
+
+	//Macro shadow_stack_exit for matching return address on stack with address on the shadow and dispose address from shadow stack
+	OutStreamer->EmitRawText(
+		INS(".macro shadow_stack_exit")
+		INS("movq\t%gs:0xe8, %r11")
+		INS("addq\t$8, %gs:0xe8")
+		INS("movq\t(%r11), %r10")
+		INS("cmpq\t%r10, (%rsp)")
+		INS("jne\t__shadow_stack_error1")
+		INS(".endm")
+	);
+	// end of shadow_stack_exit
+
+	//Macro shadow_stack_exit_callee_save for matching return address on stack with address on the shadow after the callee save registers are copied
+	OutStreamer->EmitRawText(
+		INS(".macro shadow_stack_exit_callee_save")
+		INS("movq\t-8(%r11), %r10")
+		INS("cmpq\t%r10, (%rsp)")
+		INS("jne\t1f")
+		INS("jmp\t2f")
+		INS("1:")
+		INS("movq\t0,%rax")
+		INS("2:")
+		INS(".endm")
+	);
+	//end of shadow_stack_exit_callee_save
 }
 
 void X86AsmPrinter::EmitStartOfAsmFile(Module &M) {
@@ -722,8 +779,12 @@ void X86AsmPrinter::EmitEndOfAsmFile(Module &M) {
 
 
   OutStreamer->EmitRawText("\t.section\tprofdata");
+
+
+  std::string module_name = M.getName().str();
   for (auto function : profiler_function_labels) {
-	  OutStreamer->EmitRawText("\t.asciz\t\"" + function + "\"");
+
+	  OutStreamer->EmitRawText("\t.asciz\t\"" + module_name+":"+function + "\"");
 	  OutStreamer->EmitRawText("__profiler_data_" + function + ":");
 	  OutStreamer->EmitRawText("\t.quad\t0");
 	  OutStreamer->EmitRawText("\t.quad\t0");
@@ -751,11 +812,17 @@ int getRegisterTaintSignature(unsigned Reg, const llvm::MachineFunction *MF) {
 	}
 	if (act_reg != -1)
 		return MF->live_in_types.find(act_reg)->second;
-	else
+	else {
+		if (MF->getFunction()->isVarArg())
+			return 0;
 		return 1;
+	}
+		
 }
-
+//#define PROFILE_LOG 1
 void X86AsmPrinter::EmitFunctionEntryLabel() {
+	OutStreamer->EmitRawText("\t.asciz\t\"" + MF->getName().str() + "\"");
+	OutStreamer->EmitRawText("\t.p2align\t4, 0x90");
 	OutStreamer->EmitRawText(getNextFunctionMagic()+":");
 	
 	MDNode *md_ret = MF->getFunction()->getMetadata("sgx_return_type");
@@ -779,19 +846,40 @@ void X86AsmPrinter::EmitFunctionEntryLabel() {
 	taint_flag *= 2;
 	if (getRegisterTaintSignature(X86::R9, MF) == 1)
 		taint_flag += 1;
+	OutStreamer->EmitRawText("\t.space\t8, 0x9a");
+
 	OutStreamer->EmitRawText("\t.byte\t" + std::to_string(taint_flag));
-	OutStreamer->EmitRawText("\t.space\t7, 0x9a");
+	OutStreamer->EmitRawText("\t.space\t7, 0x00");
+	
 	AsmPrinter::EmitFunctionEntryLabel();
 
 	std::string fname = MF->getName().str();
-
+#ifdef PROFILE_LOG
 	OutStreamer->EmitRawText("\tmovq\t%rdx, %r11");
 	OutStreamer->EmitRawText("\trdtsc");
 	OutStreamer->EmitRawText("\tmovabsq\t$__profiler_data_" + fname+", %r10");
 	OutStreamer->EmitRawText("\tmovl\t%eax, 8(%r10)");
 	OutStreamer->EmitRawText("\tmovl\t%edx, 12(%r10)");
 	OutStreamer->EmitRawText("\tmovq\t%r11, %rdx");
+#endif
 
+#ifdef CALLEE_SAVE_CMPSTACK
+
+	OutStreamer->EmitRawText(INS("shadow_stack_enter_callee_save"));
+	shadow_stack_push_count = 1;
+
+#endif
+/*
+	
+	OutStreamer->EmitRawText("\tmovabsq\t$0x900000150, %r11");
+	OutStreamer->EmitRawText("\tmovq\t(%r11), %r10");
+	OutStreamer->EmitRawText("\tmovq\t8(%r11), %r11");
+	OutStreamer->EmitRawText("\tmovq\t%r10, (%r11)");
+	OutStreamer->EmitRawText("\tmovabsq\t$0x900000150, %r11");
+	OutStreamer->EmitRawText("\tmovabsq\t$" + fname + ", %r10");
+	OutStreamer->EmitRawText("\tmovq\t%r10, (%r11)");
+	OutStreamer->EmitRawText("\taddq\t$8, 8(%r11)");
+*/
 	/*
 	OutStreamer->EmitRawText("\tmovq\t%gs:0x100, %r10");
 	
