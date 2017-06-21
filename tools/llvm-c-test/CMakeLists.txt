@@ -6,6 +6,8 @@ set(LLVM_LINK_COMPONENTS
   Object
   Support
   Target
+  CodeGen
+  AnnotationsInference
   )
 
 # We should only have llvm-c-test use libLLVM if libLLVM is built with the
@@ -50,5 +52,5 @@ add_llvm_tool(llvm-c-test
   )
 
 if(USE_LLVM_DYLIB)
-  target_link_libraries(llvm-c-test LLVM)
+    target_link_libraries(llvm-c-test LLVM)
 endif()
