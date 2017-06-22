@@ -3,6 +3,7 @@ SET(Z3_LIB_PATH "" CACHE PATH "Location of the Z3 lib files")
 
 include_directories(
 	${Z3_API_PATH}
+    ${Z3_API_PATH}/c++
 	${LLVM_MAIN_INCLUDE_DIR}/../lib/Target/X86
 )
 
