@@ -20,9 +20,9 @@ namespace {
 			return false;
 		}*/
 		bool runOnMachineFunction(MachineFunction &MF) {
-			for (MachineFunction::iterator &MBBi = MF.begin(); MBBi != MF.end(); MBBi++) {
+			for (MachineFunction::iterator MBBi = MF.begin(); MBBi != MF.end(); MBBi++) {
 				MachineBasicBlock &MBB = *MBBi;
-				for (MachineBasicBlock::iterator &MIi = MBB.begin(); MIi != MBB.end(); MIi++) {
+				for (MachineBasicBlock::iterator MIi = MBB.begin(); MIi != MBB.end(); MIi++) {
 					MachineInstr &MI = *MIi;
 					for (int i = 0; i < MI.getNumOperands();i++) {
 						MachineOperand &MO = MI.getOperand(i);

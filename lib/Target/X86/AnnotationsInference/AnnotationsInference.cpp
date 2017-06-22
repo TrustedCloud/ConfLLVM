@@ -3,7 +3,7 @@
 #include "llvm/Transforms/AnnotationsInference.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/IR/Module.h"
-#include "c++/z3++.h"
+#include "z3++.h"
 #include "llvm/IR/Instructions.h"
 #include <fstream>
 #include <map>

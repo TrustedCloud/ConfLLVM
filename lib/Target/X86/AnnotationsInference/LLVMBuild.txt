@@ -1,4 +1,4 @@
-;===- ./lib/Target/X86/LLVMBuild.txt ---------------------------*- Conf -*--===;
+;===- ./lib/Target/X86/InstPrinter/LLVMBuild.txt ---------------*- Conf -*--===;
 ;
 ;                     The LLVM Compiler Infrastructure
 ;
@@ -15,21 +15,9 @@
 ;
 ;===------------------------------------------------------------------------===;
 
-[common]
-subdirectories = AsmParser Disassembler InstPrinter MCTargetDesc TargetInfo Utils AnnotationsInference
-
 [component_0]
-type = TargetGroup
-name = X86
-parent = Target
-has_asmparser = 1
-has_asmprinter = 1
-has_disassembler = 1
-has_jit = 1
-
-[component_1]
 type = Library
-name = X86CodeGen
+name = AnnotationsInference
 parent = X86
-required_libraries = Analysis AsmPrinter CodeGen Core MC SelectionDAG Support Target X86AsmPrinter X86Desc X86Info X86Utils AnnotationsInference
+;required_libraries = MC Support X86Utils
 add_to_library_groups = X86
