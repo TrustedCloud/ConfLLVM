@@ -136,8 +136,11 @@ MCSection *X86WindowsTargetObjectFile::getSectionForConstant(
   if (Kind.isMergeableConst() && C) {
     const unsigned Characteristics = COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
                                      COFF::IMAGE_SCN_MEM_READ |
+									 COFF::IMAGE_SCN_MEM_WRITE | //Added for sgxg_pub to match with other sections.
                                      COFF::IMAGE_SCN_LNK_COMDAT;
     std::string COMDATSymName;
+
+	
     if (Kind.isMergeableConst4()) {
       if (Align <= 4) {
         COMDATSymName = "__real@" + scalarConstantToHexString(C);
@@ -159,9 +162,9 @@ MCSection *X86WindowsTargetObjectFile::getSectionForConstant(
         Align = 32;
       }
     }
-
+	//Fix to change constants from rdata to sgxg_pub with comdat. changed string from .rdata to sgxg_pub
     if (!COMDATSymName.empty())
-      return getContext().getCOFFSection(".rdata", Characteristics, Kind,
+      return getContext().getCOFFSection("sgxg_pub", Characteristics, Kind,
                                          COMDATSymName,
                                          COFF::IMAGE_COMDAT_SELECT_ANY);
   }

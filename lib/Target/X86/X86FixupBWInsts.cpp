@@ -289,6 +289,7 @@ MachineInstr *FixupBWInstPass::tryReplaceInstr(
     if (MachineLoop *ML = MLI->getLoopFor(&MBB)) {
       if (ML->begin() == ML->end() && !OptForSize) {
         NewMI = tryReplaceLoad(X86::MOVZX32rm8, MI);
+		//NewMI->dump();
         WasCandidate = true;
       }
     }
@@ -300,6 +301,7 @@ MachineInstr *FixupBWInstPass::tryReplaceInstr(
     // from eliminating a false dependence on the upper portion of
     // the register.
     NewMI = tryReplaceLoad(X86::MOVZX32rm16, MI);
+	
     WasCandidate = true;
     break;
 

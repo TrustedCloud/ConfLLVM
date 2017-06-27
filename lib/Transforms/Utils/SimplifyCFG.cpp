@@ -737,7 +737,9 @@ static bool ValuesOverlap(std::vector<ValueEqualityComparisonCase> &C1,
 /// determines the outcome of this comparison. If so, simplify TI. This does a
 /// very limited form of jump threading.
 bool SimplifyCFGOpt::SimplifyEqualityComparisonWithOnlyPredecessor(
+	
     TerminatorInst *TI, BasicBlock *Pred, IRBuilder<> &Builder) {
+	//errs() << "Simplify Equality Comparison With Only Pred\n";
   Value *PredVal = isValueEqualityComparison(Pred->getTerminator());
   if (!PredVal)
     return false; // Not a value comparison in predecessor.
@@ -941,6 +943,7 @@ static void FitWeights(MutableArrayRef<uint64_t> Weights) {
 /// on the same value.  If so, and if safe to do so, fold them together.
 bool SimplifyCFGOpt::FoldValueComparisonIntoPredecessors(TerminatorInst *TI,
                                                          IRBuilder<> &Builder) {
+	//errs() << "Fold Value COmparison Into Pred\n";
   BasicBlock *BB = TI->getParent();
   Value *CV = isValueEqualityComparison(TI); // CondVal
   assert(CV && "Not a comparison?");
@@ -1172,6 +1175,9 @@ static bool passingValueIsAlwaysUndefined(Value *V, Instruction *I);
 /// guarantees that BI's block dominates BB1 and BB2.
 static bool HoistThenElseCodeToIf(BranchInst *BI,
                                   const TargetTransformInfo &TTI) {
+
+	//errs() << "Hoist then else code to if\n";
+	//BI->dump();
   // This does very trivial matching, with limited scanning, to find identical
   // instructions in the two blocks.  In particular, we don't want to get into
   // O(M*N) situations here where M and N are the sizes of BB1 and BB2.  As
@@ -1226,7 +1232,10 @@ static bool HoistThenElseCodeToIf(BranchInst *BI,
                            LLVMContext::MD_dereferenceable,
                            LLVMContext::MD_dereferenceable_or_null,
                            LLVMContext::MD_mem_parallel_loop_access};
+
     combineMetadata(I1, I2, KnownIDs);
+	I1->setMetadata("sgx_call_type", I2->getMetadata("sgx_call_type"));
+	I1->setMetadata("sgx_call_return_type", I2->getMetadata("sgx_call_return_type"));
     I2->eraseFromParent();
     Changed = true;
 
@@ -2760,6 +2769,7 @@ static bool mergeConditionalStores(BranchInst *PBI, BranchInst *QBI) {
 /// successor blocks of PBI - PBI branches to BI.
 static bool SimplifyCondBranchToCondBranch(BranchInst *PBI, BranchInst *BI,
                                            const DataLayout &DL) {
+	//errs() << "Simplify Cond Branch To Cond Branch\n";
   assert(PBI->isConditional() && BI->isConditional());
   BasicBlock *BB = BI->getParent();
 

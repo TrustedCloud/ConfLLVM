@@ -650,6 +650,7 @@ ReprocessLoop:
        (PN = dyn_cast<PHINode>(I++)); )
     if (Value *V = SimplifyInstruction(PN, DL, nullptr, DT, AC)) {
       if (SE) SE->forgetValue(PN);
+	  
       PN->replaceAllUsesWith(V);
       PN->eraseFromParent();
     }

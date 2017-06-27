@@ -374,6 +374,23 @@ void Value::replaceAllUsesWith(Value *New) {
   assert(New->getType() == getType() &&
          "replaceAllUses of value with new value of different type!");
 
+  if (Instruction *I = dyn_cast<Instruction>(this)) {
+	  if (I->getMetadata("sgx_type")) {
+		  if (dyn_cast<Instruction>(New))
+			  dyn_cast<Instruction>(New)->setMetadata("sgx_type", I->getMetadata("sgx_type"));
+		  else {
+			  //New->dump();
+		  }
+			  
+	}
+  }
+  else if (GlobalObject *GO = dyn_cast<GlobalObject>(this)) {
+	  if (GO->getMetadata("sgx_type")) {
+		  dyn_cast<Instruction>(New)->setMetadata("sgx_type", GO->getMetadata("sgx_type"));
+	  }
+  }
+
+
   // Notify all ValueHandles (if present) that this value is going away.
   if (HasValueHandle)
     ValueHandleBase::ValueIsRAUWd(this, New);

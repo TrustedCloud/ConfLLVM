@@ -1173,9 +1173,12 @@ MDNode *Instruction::getMetadataImpl(StringRef Kind) const {
 }
 
 void Instruction::dropUnknownNonDebugMetadata(ArrayRef<unsigned> KnownIDs) {
+	
+
   SmallSet<unsigned, 5> KnownSet;
   KnownSet.insert(KnownIDs.begin(), KnownIDs.end());
-
+  KnownSet.insert(getContext().getMDKindID("sgx_call_type"));
+  KnownSet.insert(getContext().getMDKindID("sgx_call_return_type"));
   if (!hasMetadataHashEntry())
     return; // Nothing to remove!
 
@@ -1185,6 +1188,8 @@ void Instruction::dropUnknownNonDebugMetadata(ArrayRef<unsigned> KnownIDs) {
     // Just drop our entry at the store.
     InstructionMetadata.erase(this);
     setHasMetadataHashEntry(false);
+	
+
     return;
   }
 
@@ -1198,6 +1203,8 @@ void Instruction::dropUnknownNonDebugMetadata(ArrayRef<unsigned> KnownIDs) {
     InstructionMetadata.erase(this);
     setHasMetadataHashEntry(false);
   }
+
+
 }
 
 void Instruction::setMetadata(unsigned KindID, MDNode *Node) {

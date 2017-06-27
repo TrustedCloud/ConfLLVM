@@ -311,7 +311,7 @@ void PassManagerBuilder::addFunctionSimplificationPasses(
       MPM.add(createMergedLoadStoreMotionPass()); // Merge ld/st in diamonds
     MPM.add(createGVNPass(DisableGVNLoadPRE));  // Remove redundancies
   }
-  MPM.add(createMemCpyOptPass());             // Remove memcpy / form memset
+ // MPM.add(createMemCpyOptPass());             // Remove memcpy / form memset
   MPM.add(createSCCPPass());                  // Constant prop with SCCP
 
   // Delete dead bit computations (instcombine runs after to fold away the dead
@@ -406,7 +406,7 @@ void PassManagerBuilder::populateModulePassManager(
     // Promote any localized global vars.
     MPM.add(createPromoteMemoryToRegisterPass());
 
-    MPM.add(createDeadArgEliminationPass()); // Dead argument elimination
+    //MPM.add(createDeadArgEliminationPass()); // Dead argument elimination
 
     addInstructionCombiningPass(MPM); // Clean up after IPCP & DAE
     addExtensionsToPM(EP_Peephole, MPM);
@@ -670,7 +670,7 @@ void PassManagerBuilder::addLTOOptimizationPasses(legacy::PassManagerBase &PM) {
   PM.add(createConstantMergePass());
 
   // Remove unused arguments from functions.
-  PM.add(createDeadArgEliminationPass());
+  //PM.add(createDeadArgEliminationPass());
 
   // Reduce the code after globalopt and ipsccp.  Both can open up significant
   // simplification opportunities, and both can propagate functions through
@@ -713,7 +713,7 @@ void PassManagerBuilder::addLTOOptimizationPasses(legacy::PassManagerBase &PM) {
   if (EnableMLSM)
     PM.add(createMergedLoadStoreMotionPass()); // Merge ld/st in diamonds.
   PM.add(createGVNPass(DisableGVNLoadPRE)); // Remove redundancies.
-  PM.add(createMemCpyOptPass());            // Remove dead memcpys.
+  //PM.add(createMemCpyOptPass());            // Remove dead memcpys.
 
   // Nuke dead stores.
   PM.add(createDeadStoreEliminationPass());

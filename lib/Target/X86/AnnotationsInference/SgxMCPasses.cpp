@@ -91,9 +91,34 @@ namespace {
 				}
 			}
 		}
+		void fixIMPLICITDEF(MachineFunction &MF) {
+			const TargetInstrInfo *TII;
+			const X86Subtarget *STI;
+			STI = &MF.getSubtarget<X86Subtarget>();
+			TII = STI->getInstrInfo();
+			const TargetRegisterInfo* TRI = STI->getRegisterInfo();
+			for (MachineFunction::iterator BBi = MF.begin(); BBi != MF.end(); BBi++) {
+				for (MachineBasicBlock::iterator MCi = BBi->begin(); MCi != BBi->end(); MCi++) {
+					if (MCi->getOpcode() == X86::IMPLICIT_DEF) {
+						unsigned Reg = MCi->getOperand(0).getReg();
+						int size = TRI->getMinimalPhysRegClass(Reg)->getSize();
+						if(size == 8)
+							MachineBasicBlock::iterator CLEAR = BuildMI(*BBi, MCi, MCi->getDebugLoc(), TII->get(X86::XOR64rr)).addReg(Reg, RegState::Define).addReg(Reg).addReg(Reg);
+						else if(size == 4)
+							MachineBasicBlock::iterator CLEAR = BuildMI(*BBi, MCi, MCi->getDebugLoc(), TII->get(X86::XOR32rr)).addReg(Reg, RegState::Define).addReg(Reg).addReg(Reg);
+						else if(size == 2)
+							MachineBasicBlock::iterator CLEAR = BuildMI(*BBi, MCi, MCi->getDebugLoc(), TII->get(X86::XOR16rr)).addReg(Reg, RegState::Define).addReg(Reg).addReg(Reg);
+						else
+							MachineBasicBlock::iterator CLEAR = BuildMI(*BBi, MCi, MCi->getDebugLoc(), TII->get(X86::XOR8rr)).addReg(Reg, RegState::Define).addReg(Reg).addReg(Reg);
+					}
+				}
+
+			}
+		}
 		bool runOnMachineFunction(MachineFunction &MF) {
 			//fixXMMSave(MF);
 			//fixXMMRestore(MF);
+			fixIMPLICITDEF(MF);
 			return true;
 		}
 	};

@@ -632,12 +632,12 @@ bool LoopIdiomRecognize::processLoopStores(SmallVectorImpl<StoreInst *> &SL,
 
     bool NegStride = StoreSize == -Stride;
 
-    if (processLoopStridedStore(StorePtr, StoreSize, HeadStore->getAlignment(),
-                                StoredVal, HeadStore, AdjacentStores, StoreEv,
-                                BECount, NegStride)) {
-      TransformedStores.insert(AdjacentStores.begin(), AdjacentStores.end());
-      Changed = true;
-    }
+    //if (processLoopStridedStore(StorePtr, StoreSize, HeadStore->getAlignment(),
+    //                            StoredVal, HeadStore, AdjacentStores, StoreEv,
+    //                            BECount, NegStride)) {
+    //  TransformedStores.insert(AdjacentStores.begin(), AdjacentStores.end());
+    //  Changed = true;
+    //}
   }
 
   return Changed;

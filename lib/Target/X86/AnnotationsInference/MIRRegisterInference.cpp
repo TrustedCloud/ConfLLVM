@@ -56,7 +56,7 @@ namespace llvm {
 			if (MI->uses().begin()->getReg() == (MI->uses().begin() + 1)->getReg())
 				return 2;
 		}
-		MI->dump();
+		//MI->dump();
 		/*Special cases*/
 		
 		if (MI->mayLoad() && MI->sgx_type == 1)
@@ -101,10 +101,7 @@ namespace llvm {
 			
 			
 			if (isDef) {
-
-				
 				int taint = inferTaintForInstruction(MI.getInstrIterator().getNodePtrUnchecked(), temp_set);
-				
 				for (int i = 0; i < defRegs.size(); i++) {
 					unsigned defReg = defRegs[i];
 					if (taint == 1) {
@@ -149,9 +146,16 @@ namespace llvm {
 		register_set_map start_set;
 		register_set_map end_set;
 		const MachineBasicBlock *entry_block = MF->begin().getNodePtrUnchecked();
+		unsigned arg_set[] = { X86::RCX, X86::RDX, X86::R8, X86::R9 };
+		for (int i = 0; i < sizeof(arg_set) / sizeof(arg_set[0]); i++) {
+			for (MCRegAliasIterator alias(arg_set[i], TRI, true); alias.isValid(); ++alias)
+				start_set[entry_block].insert(*alias);
+		}
+		
 		for (auto reg_iterator = MF->live_in_types.begin(); reg_iterator != MF->live_in_types.end(); reg_iterator++) {
-			if (reg_iterator->second == 1)
-				start_set[entry_block].insert(reg_iterator->first);
+			if (reg_iterator->second == 2)
+				for (MCRegAliasIterator alias(reg_iterator->first, TRI, true); alias.isValid(); ++alias)
+					start_set[entry_block].erase(*alias);
 		}
 		bool repeat = true;
 		while (repeat) {

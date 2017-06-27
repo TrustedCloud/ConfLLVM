@@ -400,9 +400,17 @@ X86MCInstLower::LowerMachineOperand(const MachineInstr *MI,
 
 void X86MCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {
   OutMI.setOpcode(MI->getOpcode());
+  //MI->print(errs());
+  //if (MI->getOpcode() == X86::MOVAPSmr)
+  //	  MI->print(errs());
 
+
+  int fixed_reg = 0;
+  int fixed_seg = 0;
   int i = 0;
   int index = getMemLocation(MI);
+  const TargetRegisterInfo* TRI = MI->getParent()->getParent()->getSubtarget().getRegisterInfo();
+  int subregidx = TRI->getSubRegIndex(X86::RAX, X86::EAX);
   for (const MachineOperand &MO : MI->operands()) {
 	  MachineOperand new_MO = MO;
 	  new_MO.clearParent();
@@ -418,7 +426,7 @@ void X86MCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {
 		  }
 	  }
 	  else */ 
-	  
+#ifdef USE_OFFSET_STACK 
       if (MI->sgx_type == 1) {		  
 		  if (index + 3 == i) {
 			  if (MI->getOperand(0 + index).getReg() == X86::RSP || MI->getOperand(0 + index).getReg() == X86::ESP || MI->getOperand(0 + index).getReg() == X86::EBP || MI->getOperand(0 + index).getReg() == X86::RBP) {
@@ -426,16 +434,46 @@ void X86MCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {
 			  }
 		  }
 	  }
+#endif
 
 	  unsigned opcode = MI->getOpcode();
+	 
+	  if (opcode != X86::LEA64r && opcode != X86::LEA32r && opcode != X86::LEA16r && opcode != X86::LEA64_32r && !MI->memoperands_empty())
+	  {
+		  if (index + 4 == i) {
+			  fixed_reg = 1;
+			  if (MI->sgx_type == 1)
+				  new_MO.setReg(X86::GS);
+			  else if (MI->sgx_type == 2 || (MI->getFlags() & MachineInstr::FrameSetup) || (MI->getFlags() & MachineInstr::FrameDestroy))
+				  new_MO.setReg(X86::FS);
+			  else {
+				  errs() << "NO TYPE ON MI INSTRUCTIONS\n";
+				  MI->print(errs());
+				  assert(false && "No type on MI instruction with memory operand");
+			  }
 
-	 // if (index + 4 == i && opcode != X86::LEA64r && opcode != X86::LEA32r && opcode != X86::LEA16r && opcode != X86::LEA64_32r)
-	 // {
-	//	  new_MO.setReg(X86::GS);
-	  //}
+		  }
+		  else if ((index + 0 == i) || (index + 2 == i)) {
+			  fixed_seg = 1;
+			  unsigned reg = new_MO.getReg();
+			  if (reg != X86::NoRegister){
+				  int size = TRI->getMinimalPhysRegClass(reg)->getSize();
+			      if (size == 8) {
+				      new_MO.setReg(TRI->getSubReg(reg, subregidx));
+			      }
+			  }
+		  }	  
+	  }
+	  
+	  
+	  
+	  
 	  if (auto MaybeMCOp = LowerMachineOperand(MI, new_MO))
 		  OutMI.addOperand(MaybeMCOp.getValue());
 	  i++;
+  }
+  if (fixed_reg != fixed_seg) {
+	  errs() << "ERROR WHILE FIXING REGISTERS AND SEGMENTS\n";
   }
     
   // Handle a few special cases to eliminate operand modifiers.
@@ -1399,7 +1437,7 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
 	}
 
 #endif
-
+	/*
 	if (MI->getOpcode() == X86::RETQ) {
 		OutStreamer->EmitRawText(
 			INS("movq\t(%rsp), %r10")
@@ -1408,12 +1446,58 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
 		    INS("je\t__shadow_stack_error1")
 			INS("popq\t%r11")
 			INS("jmp\t*%r10")
+
 		);
+		return;
 	}
+	*/
 
-
-
+  
   X86MCInstLower MCInstLowering(*MF, *this);
+
+  unsigned int opcode = MI->getOpcode();
+  
+  /*
+  if (opcode != X86::LEA64r && opcode != X86::LEA32r && opcode != X86::LEA16r && opcode != X86::LEA64_32r && !MI->memoperands_empty()) {
+	  int index = getMemLocation(MI);
+	  unsigned reg = MI->getOperand(index).getReg();
+	  if (reg != X86::NoRegister) {
+		  std::string reg_name = std::string("%") + X86ATTInstPrinter::getRegisterName(reg);
+		  OutStreamer->EmitRawText(INS("pushf"));
+		  OutStreamer->EmitRawText("\tpushq\t%rax");
+		  OutStreamer->EmitRawText("\tpushq\t%rdx");
+		  MCInstBuilder MIB = MCInstBuilder(X86::LEA64r).addReg(X86::RAX).addReg(MI->getOperand(index + 0).getReg()).addImm(MI->getOperand(index + 1).getImm()).addReg(MI->getOperand(index + 2).getReg()).addImm(MI->getOperand(index + 3).getImm()).addReg(MI->getOperand(index + 4).getReg());
+		  OutStreamer->EmitInstruction(MIB, getSubtargetInfo());
+		  OutStreamer->EmitRawText(INS("movq\t%rax, %rdx"));
+		  //OutStreamer->EmitRawText("\tshlq\t$32, " + reg_name);
+		  //OutStreamer->EmitRawText("\taddq\t$0x30, " + reg_name);
+		  //OutStreamer->EmitRawText("\trorq\t$32, " + reg_name);
+		  OutStreamer->EmitRawText("\tshrq\t$32, %rax");
+		  OutStreamer->EmitRawText("\tcmpq\t$0x30, %rax");
+		  OutStreamer->EmitRawText("\tje\t1f");
+		  
+		  
+		  
+		  OutStreamer->EmitRawText("\tmovabsq\t$__error_msg6, %rcx");
+		  OutStreamer->EmitRawText("\tcallq\tprintf");
+		  OutStreamer->EmitRawText("\ttest\t0, %rax");
+		  
+		  
+		  //OutStreamer->EmitRawText("\ttest\t0, %rax");
+		  //OutStreamer->EmitRawText("\tjmp\t__error_segment_fail");
+		  OutStreamer->EmitRawText("1:");
+		  OutStreamer->EmitRawText("\tpopq\t%rdx");
+		  OutStreamer->EmitRawText("\tpopq\t%rax");
+		  OutStreamer->EmitRawText(INS("popf"));
+
+	  }
+	  
+  }
+  */
+  
+  
+  
+
 #ifdef  GEN_SHADOW
   if (MI->getOpcode() == X86::MOVAPSmr && (MI->getFlags() & MachineInstr::FrameSetup))
 	  return;
@@ -1561,6 +1645,9 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
 	  OutStreamer->EmitRawText("\tsubq\t$8, 8(%r11)");
 	  */
 
+
+	  //OutStreamer->EmitRawText("\tshadow_stack_exit");
+
 #ifdef PROFILE_LOG
 	  OutStreamer->EmitRawText("\tmovq\t%rax, %r11");
 	  OutStreamer->EmitRawText("\trdtsc");
@@ -1637,6 +1724,7 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
    
 	
   if (MI->isCall() && !(MI->getFlags() & MachineInstr::FrameSetup)) {
+	  //MI->dump();
 	  int taint_flag = getTaintFlag(MI, this);
 
 	  const TargetRegisterInfo *TRI = MI->getParent()->getParent()->getSubtarget().getRegisterInfo();
@@ -2364,5 +2452,18 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
 	  }
 
   }
+//  unsigned int opcode = MI->getOpcode();
+  if ((opcode == X86::LEA64r || opcode == X86::LEA32r || opcode == X86::LEA16r || opcode == X86::LEA64_32r) && MI->sgx_type == 1) {
+	  bool rbp_stack = RI->getFrameLowering(*MI->getParent()->getParent())->hasFP(*MI->getParent()->getParent());
+	  if (MI->getOperand(1).getReg() == X86::RSP || (rbp_stack && MI->getOperand(1).getReg() == X86::RBP)) {
+		  std::string reg_name = std::string("%") + X86ATTInstPrinter::getRegisterName(MI->getOperand(0).getReg());
+
+		  OutStreamer->EmitRawText("\trorq\t$32, " + reg_name);
+		  OutStreamer->EmitRawText("\tleaq\t0xA(" + reg_name + "), " + reg_name);
+		  OutStreamer->EmitRawText("\trorq\t$32, " + reg_name);
+	  }
+  }
+
+
 
 }

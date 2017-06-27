@@ -23,7 +23,16 @@ void User::anchor() {}
 
 void User::replaceUsesOfWith(Value *From, Value *To) {
   if (From == To) return;   // Duh what?
-
+  if (Instruction *I = dyn_cast<Instruction>(From)) {
+	  if (I->getMetadata("sgx_type")) {
+		  if (dyn_cast<Instruction>(To))
+			  dyn_cast<Instruction>(To)->setMetadata("sgx_type", I->getMetadata("sgx_type"));
+		  else {
+			  //To->dump();
+		  }
+	  }
+  }
+  
   assert((!isa<Constant>(this) || isa<GlobalValue>(this)) &&
          "Cannot call User::replaceUsesOfWith on a constant!");
 

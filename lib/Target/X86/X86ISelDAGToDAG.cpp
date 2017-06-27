@@ -2372,6 +2372,7 @@ void X86DAGToDAGISel::Select(SDNode *Node) {
         Move =
           SDValue(CurDAG->getMachineNode(X86::MOVZX32rm8, dl, MVT::i32,
                                          MVT::Other, Ops), 0);
+		Move->sgx_type = N0->sgx_type;
         Chain = Move.getValue(1);
         ReplaceUses(N0.getValue(1), Chain);
       } else {

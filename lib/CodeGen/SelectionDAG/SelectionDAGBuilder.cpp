@@ -3437,6 +3437,7 @@ bool getSgxType_recurse(const Value *PtrV, std::set<const Instruction*> analyzed
 		else {
 			if (ptr_md_node->getNumOperands() < 2) {
 				PI->dump();
+				PI->getType()->dump();
 				//errs() << "Now dumping entire function!\n";
 				PI->getParent()->getParent()->dump();
 				llvm_unreachable("PrtV Node with not enough md!");

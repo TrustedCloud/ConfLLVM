@@ -99,7 +99,7 @@ CreateMemSet(Value *Ptr, Value *Val, Value *Size, unsigned Align,
  
   if (NoAliasTag)
     CI->setMetadata(LLVMContext::MD_noalias, NoAliasTag);
- 
+
   return CI;
 }
 

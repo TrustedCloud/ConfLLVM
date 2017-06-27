@@ -778,10 +778,24 @@ void X86AsmPrinter::EmitEndOfAsmFile(Module &M) {
   }
 
 
+  OutStreamer->EmitRawText("\t.section\tfnames");
+  for (auto function : profiler_function_labels) {
+	  std::string fname = function.substr(0, 63);
+	  int extra = 64 - fname.length() - 1;
+	  OutStreamer->EmitRawText("\t.asciz\t\"" + fname + "\"");
+	  if (extra > 0)
+		  OutStreamer->EmitRawText("\t.space\t" + std::to_string(extra) + ", 0x0");
+  }
+
+  
+  /*
   OutStreamer->EmitRawText("\t.section\tprofdata");
 
 
   std::string module_name = M.getName().str();
+
+  
+
   for (auto function : profiler_function_labels) {
 
 	  OutStreamer->EmitRawText("\t.asciz\t\"" + module_name+":"+function + "\"");
@@ -789,7 +803,7 @@ void X86AsmPrinter::EmitEndOfAsmFile(Module &M) {
 	  OutStreamer->EmitRawText("\t.quad\t0");
 	  OutStreamer->EmitRawText("\t.quad\t0");
   }
-
+  */
   OutStreamer->EmitRawText("\t.section\tsgx_flab");
   for (auto label : getFunctionMagicLabels()) {
 	  OutStreamer->EmitRawText("\t.quad\t" + label);
@@ -798,6 +812,9 @@ void X86AsmPrinter::EmitEndOfAsmFile(Module &M) {
   for (auto label : getCallMagicLabels()) {
 	  OutStreamer->EmitRawText("\t.quad\t" + label);
   }
+
+
+
 }
 
 
@@ -821,7 +838,8 @@ int getRegisterTaintSignature(unsigned Reg, const llvm::MachineFunction *MF) {
 }
 //#define PROFILE_LOG 1
 void X86AsmPrinter::EmitFunctionEntryLabel() {
-	OutStreamer->EmitRawText("\t.asciz\t\"" + MF->getName().str() + "\"");
+
+	//OutStreamer->EmitRawText("\t.asciz\t\"" + MF->getName().str() + "\"");
 	OutStreamer->EmitRawText("\t.p2align\t4, 0x90");
 	OutStreamer->EmitRawText(getNextFunctionMagic()+":");
 	
@@ -834,6 +852,7 @@ void X86AsmPrinter::EmitFunctionEntryLabel() {
 		taint_flag = 1;
 	else
 		taint_flag = 0;
+
 	taint_flag *= 2;
 	if (getRegisterTaintSignature(X86::RCX, MF) == 1)
 		taint_flag += 1;
@@ -847,7 +866,7 @@ void X86AsmPrinter::EmitFunctionEntryLabel() {
 	if (getRegisterTaintSignature(X86::R9, MF) == 1)
 		taint_flag += 1;
 	OutStreamer->EmitRawText("\t.space\t8, 0x9a");
-
+	taint_flag ^= 0b1111;
 	OutStreamer->EmitRawText("\t.byte\t" + std::to_string(taint_flag));
 	OutStreamer->EmitRawText("\t.space\t7, 0x00");
 	
@@ -869,6 +888,9 @@ void X86AsmPrinter::EmitFunctionEntryLabel() {
 	shadow_stack_push_count = 1;
 
 #endif
+
+
+	//OutStreamer->EmitRawText("\tshadow_stack_enter");
 /*
 	
 	OutStreamer->EmitRawText("\tmovabsq\t$0x900000150, %r11");

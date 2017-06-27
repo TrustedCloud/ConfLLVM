@@ -39,6 +39,7 @@
 #include "llvm/Target/TargetRegisterInfo.h"
 #include "llvm/Target/TargetSubtargetInfo.h"
 #include <algorithm>
+
 using namespace llvm;
 
 #define DEBUG_TYPE "dagcombine"
@@ -892,6 +893,7 @@ SDValue DAGCombiner::CombineTo(SDNode *N, const SDValue *To, unsigned NumTo,
   // something else needing this node.
   if (N->use_empty())
     deleteAndRecombine(N);
+ 
   return SDValue(N, 0);
 }
 
@@ -1192,7 +1194,6 @@ bool DAGCombiner::PromoteLoad(SDValue Op) {
                                    LD->getChain(), LD->getBasePtr(),
                                    MemVT, LD->getMemOperand());
     SDValue Result = DAG.getNode(ISD::TRUNCATE, dl, VT, NewLD);
-
     DEBUG(dbgs() << "\nPromoting ";
           N->dump(&DAG);
           dbgs() << "\nTo: ";
@@ -1349,6 +1350,7 @@ void DAGCombiner::Run(CombineLevel AtLevel) {
 }
 
 SDValue DAGCombiner::visit(SDNode *N) {
+	SDValue V;
   switch (N->getOpcode()) {
   default: break;
   case ISD::TokenFactor:        return visitTokenFactor(N);
@@ -4758,6 +4760,8 @@ SDValue DAGCombiner::visitSRA(SDNode *N) {
 }
 
 SDValue DAGCombiner::visitSRL(SDNode *N) {
+
+
   SDValue N0 = N->getOperand(0);
   SDValue N1 = N->getOperand(1);
   EVT VT = N0.getValueType();
@@ -6466,6 +6470,7 @@ SDValue DAGCombiner::visitZERO_EXTEND(SDNode *N) {
                                          LN0->getChain(), LN0->getBasePtr(),
                                          LN0->getMemoryVT(),
                                          LN0->getMemOperand());
+		
         APInt Mask = cast<ConstantSDNode>(N0.getOperand(1))->getAPIntValue();
         Mask = Mask.zext(VT.getSizeInBits());
         SDLoc DL(N);

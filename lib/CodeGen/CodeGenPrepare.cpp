@@ -3144,6 +3144,7 @@ bool AddressingModeMatcher::isPromotionProfitable(
 bool AddressingModeMatcher::matchOperationAddr(User *AddrInst, unsigned Opcode,
                                                unsigned Depth,
                                                bool *MovedAway) {
+
   // Avoid exponential behavior on extremely deep expression trees.
   if (Depth >= 5) return false;
 
@@ -3380,6 +3381,7 @@ bool AddressingModeMatcher::matchOperationAddr(User *AddrInst, unsigned Opcode,
 /// for the target.
 ///
 bool AddressingModeMatcher::matchAddr(Value *Addr, unsigned Depth) {
+	
   // Start a transaction at this point that we will rollback if the matching
   // fails.
   TypePromotionTransaction::ConstRestorationPt LastKnownGood =

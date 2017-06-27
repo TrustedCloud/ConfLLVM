@@ -616,6 +616,7 @@ TerminatorInst *
 llvm::SplitBlockAndInsertIfThen(Value *Cond, Instruction *SplitBefore,
                                 bool Unreachable, MDNode *BranchWeights,
                                 DominatorTree *DT, LoopInfo *LI) {
+
   BasicBlock *Head = SplitBefore->getParent();
   BasicBlock *Tail = Head->splitBasicBlock(SplitBefore->getIterator());
   TerminatorInst *HeadOldTerm = Head->getTerminator();
