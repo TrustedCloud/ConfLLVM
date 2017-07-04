@@ -102,7 +102,10 @@ namespace {
 					if (MCi->getOpcode() == X86::IMPLICIT_DEF) {
 						unsigned Reg = MCi->getOperand(0).getReg();
 						int size = TRI->getMinimalPhysRegClass(Reg)->getSize();
-						if(size == 8)
+						
+						if(size == 16)
+							MachineBasicBlock::iterator CLEAR = BuildMI(*BBi, MCi, MCi->getDebugLoc(), TII->get(X86::XORPSrr)).addReg(Reg, RegState::Define).addReg(Reg).addReg(Reg);
+						else if(size == 8)
 							MachineBasicBlock::iterator CLEAR = BuildMI(*BBi, MCi, MCi->getDebugLoc(), TII->get(X86::XOR64rr)).addReg(Reg, RegState::Define).addReg(Reg).addReg(Reg);
 						else if(size == 4)
 							MachineBasicBlock::iterator CLEAR = BuildMI(*BBi, MCi, MCi->getDebugLoc(), TII->get(X86::XOR32rr)).addReg(Reg, RegState::Define).addReg(Reg).addReg(Reg);

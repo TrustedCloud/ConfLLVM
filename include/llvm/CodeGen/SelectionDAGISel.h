@@ -204,6 +204,8 @@ protected:
 
   /// Replace all uses of \c F with \c T, then remove \c F from the DAG.
   void ReplaceNode(SDNode *F, SDNode *T) {
+	  T->sgx_type = F->sgx_type;
+	  T->register_sgx_type = F->register_sgx_type;
     CurDAG->ReplaceAllUsesWith(F, T);
     CurDAG->RemoveDeadNode(F);
   }

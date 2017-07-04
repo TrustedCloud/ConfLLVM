@@ -2155,6 +2155,8 @@ void X86DAGToDAGISel::Select(SDNode *Node) {
   case ISD::UMUL_LOHI: {
     SDValue N0 = Node->getOperand(0);
     SDValue N1 = Node->getOperand(1);
+	//N0->dump();
+	//N1->dump();
 
     bool isSigned = Opcode == ISD::SMUL_LOHI;
     bool hasBMI2 = Subtarget->hasBMI2();
@@ -2245,6 +2247,8 @@ void X86DAGToDAGISel::Select(SDNode *Node) {
         MachineSDNode::mmo_iterator MemOp = MF->allocateMemRefsArray(1);
         MemOp[0] = LoadNode->getMemOperand();
         CNode->setMemRefs(MemOp, MemOp + 1);
+		//CNode->dump();
+		CNode->sgx_type = N1->sgx_type;
       }
     } else {
       SDValue Ops[] = { N1, InFlag };

@@ -1437,7 +1437,7 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
 	}
 
 #endif
-	/*
+	
 	if (MI->getOpcode() == X86::RETQ) {
 		OutStreamer->EmitRawText(
 			INS("movq\t(%rsp), %r10")
@@ -1450,7 +1450,7 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
 		);
 		return;
 	}
-	*/
+	
 
   
   X86MCInstLower MCInstLowering(*MF, *this);

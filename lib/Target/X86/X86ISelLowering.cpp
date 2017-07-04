@@ -107,6 +107,7 @@ X86TargetLowering::X86TargetLowering(const X86TargetMachine &TM,
   if (Subtarget.isTargetKnownWindowsMSVC()) {
     // Setup Windows compiler runtime calls.
     setLibcallName(RTLIB::SDIV_I64, "_alldiv");
+
     setLibcallName(RTLIB::UDIV_I64, "_aulldiv");
     setLibcallName(RTLIB::SREM_I64, "_allrem");
     setLibcallName(RTLIB::UREM_I64, "_aullrem");

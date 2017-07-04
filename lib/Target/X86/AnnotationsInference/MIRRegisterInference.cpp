@@ -41,6 +41,7 @@ namespace llvm {
 			return MI->register_sgx_type;
 		if (MI->mayLoad() && MI->sgx_type == 0) {
 			MI->dump();
+			errs() << (void *) MI << "\n";
 			llvm_unreachable("All loads must have a type!");
 		}
 		if (MI->isCall()) {
