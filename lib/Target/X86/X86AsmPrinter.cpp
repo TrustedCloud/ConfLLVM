@@ -622,6 +622,7 @@ void X86AsmPrinter::EmitStartOfAsmFile(Module &M) {
   
 
   sgxFunctionMagicReset();
+  sgxCallSiteMagicReset();
   sgxCallMagicReset();
   PrintModuleMacros(OutStreamer.get());
   const Triple &TT = TM.getTargetTriple();
@@ -813,6 +814,15 @@ void X86AsmPrinter::EmitEndOfAsmFile(Module &M) {
 	  OutStreamer->EmitRawText("\t.quad\t" + label);
   }
 
+  OutStreamer->EmitRawText("\t.section\tcfi_clab");
+  for (int i = 0; i < sgx_callsite_magic_index;i++) {
+    OutStreamer->EmitRawText("\t.quad\t" "__sgx_callsite_magic_" + std::to_string(i));
+  }
+
+  OutStreamer->EmitRawText("\t.section\tcfi_rlab");
+  for (int i = 0; i < sgx_returnsite_magic_index; i++) {
+    OutStreamer->EmitRawText("\t.quad\t" "__sgx_returnsite_magic_" + std::to_string(i));
+  }
 
 
 }

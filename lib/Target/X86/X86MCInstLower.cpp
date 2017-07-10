@@ -1439,14 +1439,18 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
 #endif
 	
 	if (MI->getOpcode() == X86::RETQ) {
-		OutStreamer->EmitRawText(
-			INS("movq\t(%rsp), %r10")
-		    INS("movabsq\t$0x9a9a9a9a9a9a9a9a, %r11")
-			INS("cmpq\t%r11, (%r10)")
-		    INS("je\t__shadow_stack_error1")
+    OutStreamer->EmitRawText(
+      INS("movq\t(%rsp), %r10")
+    );
+    OutStreamer->EmitRawText(getNextReturnSiteMagic() + ":");
+    OutStreamer->EmitRawText(
+      INS("movabsq\t$0x6565656565656565, %r11")
+      INS("notq\t%r11")
+      INS("cmpq\t%r11, (%r10)")
+      INS("jne\t__shadow_stack_error1")
 			INS("popq\t%r11")
+      INS("addq\t$8, %r10")
 			INS("jmp\t*%r10")
-
 		);
 		return;
 	}
@@ -2339,6 +2343,10 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
 	OutStreamer->EmitInstruction(TmpInst, getSubtargetInfo());
 	if (MI->isCall() && !(MI->getFlags() & MachineInstr::FrameSetup)) {
 		// This is for the great requirement our compilers have that the address should be 16 byte aligned which is quite frustrating.
+    OutStreamer->EmitRawText(getNextCallSiteMagic() + ":");
+    OutStreamer->EmitRawText(
+      INS(".space\t8, 0x9a")
+    );
 #ifdef GEN_SHADOW
 
 #ifdef PROFILE_LOG
