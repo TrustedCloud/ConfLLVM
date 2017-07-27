@@ -814,16 +814,24 @@ void X86AsmPrinter::EmitEndOfAsmFile(Module &M) {
 	  OutStreamer->EmitRawText("\t.quad\t" + label);
   }
 
-  OutStreamer->EmitRawText("\t.section\tcfi_clab");
-  for (int i = 0; i < sgx_callsite_magic_index;i++) {
-    OutStreamer->EmitRawText("\t.quad\t" "__sgx_callsite_magic_" + std::to_string(i));
+  OutStreamer->EmitRawText("\t.section\tclab_pub");
+  for (int i = 0; i < sgx_callsite_magic_index_public;i++) {
+    OutStreamer->EmitRawText("\t.quad\t" "__sgx_callsite_magic_public_" + std::to_string(i));
   }
 
-  OutStreamer->EmitRawText("\t.section\tcfi_rlab");
-  for (int i = 0; i < sgx_returnsite_magic_index; i++) {
-    OutStreamer->EmitRawText("\t.quad\t" "__sgx_returnsite_magic_" + std::to_string(i));
+  OutStreamer->EmitRawText("\t.section\trlab_pub");
+  for (int i = 0; i < sgx_returnsite_magic_index_public; i++) {
+    OutStreamer->EmitRawText("\t.quad\t" "__sgx_returnsite_magic_public_" + std::to_string(i));
+  }
+  OutStreamer->EmitRawText("\t.section\tclab_pri");
+  for (int i = 0; i < sgx_callsite_magic_index_private; i++) {
+	  OutStreamer->EmitRawText("\t.quad\t" "__sgx_callsite_magic_private_" + std::to_string(i));
   }
 
+  OutStreamer->EmitRawText("\t.section\trlab_pri");
+  for (int i = 0; i < sgx_returnsite_magic_index_private; i++) {
+	  OutStreamer->EmitRawText("\t.quad\t" "__sgx_returnsite_magic_private_" + std::to_string(i));
+  }
 
 }
 

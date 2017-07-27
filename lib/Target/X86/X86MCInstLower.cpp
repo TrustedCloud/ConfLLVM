@@ -15,6 +15,14 @@
 //#define GENERATE_CHECKS 1
 //#define PROFILE_LOG 1
 
+
+//bool generateSegmentScheme = false;
+//bool generateChecks = false;
+//bool generateIndirectCallChecks = false;
+
+
+
+
 #include "X86AsmPrinter.h"
 #include "X86RegisterInfo.h"
 #include "X86ShuffleDecodeConstantPool.h"
@@ -56,6 +64,26 @@ cl::opt<int> SgxStackSize("sgx-stack-size", cl::desc("Stack size for sgx stacks"
 //int SgxStackSize = 0x10000000;
 cl::opt<bool> NonMpxChecks("non-mpx-checks", cl::desc("Generate non mpx checks(less effecient)"), cl::value_desc("bool"));
 cl::opt<int> SgxDebugNumber("sgx-debug-module-number", cl::desc("Unique module number for this module to debug sgxc instructions"), cl::value_desc("module number"));
+
+
+static cl::opt<bool> generateSegmentScheme(
+	"generate-segment-scheme", cl::init(false),
+	cl::desc("Enable Segment scheme for protecting memory accesses instead of checks"));
+
+static cl::opt<bool> generateChecks(
+	"generate-checks", cl::init(false),
+	cl::desc("Enable checks for protecting memory instead of segments (also enables offset stack)"));
+
+static cl::opt<bool> generateIndirectCallChecks(
+	"generate-indirect-call-checks", cl::init(false),
+	cl::desc("Enable checks on indirect calls for CFI"));
+
+
+static cl::opt<bool> generateReturnChecks(
+	"generate-return-checks", cl::init(false),
+	cl::desc("Enable checks before returning from calls for CFI"));
+
+
 
 namespace {
 
@@ -426,44 +454,49 @@ void X86MCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {
 		  }
 	  }
 	  else */ 
-#ifdef USE_OFFSET_STACK 
-      if (MI->sgx_type == 1) {		  
-		  if (index + 3 == i) {
-			  if (MI->getOperand(0 + index).getReg() == X86::RSP || MI->getOperand(0 + index).getReg() == X86::ESP || MI->getOperand(0 + index).getReg() == X86::EBP || MI->getOperand(0 + index).getReg() == X86::RBP) {
-				  new_MO.setImm(MO.getImm() - SgxStackSize);
+	  if (generateChecks) {
+
+		  if (MI->sgx_type == 1) {
+			  if (index + 3 == i) {
+				  if (MI->getOperand(0 + index).getReg() == X86::RSP || MI->getOperand(0 + index).getReg() == X86::ESP || MI->getOperand(0 + index).getReg() == X86::EBP || MI->getOperand(0 + index).getReg() == X86::RBP) {
+					  new_MO.setImm(MO.getImm() - SgxStackSize);
+				  }
 			  }
 		  }
 	  }
-#endif
 
-	  unsigned opcode = MI->getOpcode();
-	 
-	  if (opcode != X86::LEA64r && opcode != X86::LEA32r && opcode != X86::LEA16r && opcode != X86::LEA64_32r && !MI->memoperands_empty())
-	  {
-		  if (index + 4 == i) {
-			  fixed_reg = 1;
-			  if (MI->sgx_type == 1)
-				  new_MO.setReg(X86::GS);
-			  else if (MI->sgx_type == 2 || (MI->getFlags() & MachineInstr::FrameSetup) || (MI->getFlags() & MachineInstr::FrameDestroy))
-				  new_MO.setReg(X86::FS);
-			  else {
-				  errs() << "NO TYPE ON MI INSTRUCTIONS\n";
-				  MI->print(errs());
-				  assert(false && "No type on MI instruction with memory operand");
+
+	  if (generateSegmentScheme) {
+		  unsigned opcode = MI->getOpcode();
+
+		  if (opcode != X86::LEA64r && opcode != X86::LEA32r && opcode != X86::LEA16r && opcode != X86::LEA64_32r && !MI->memoperands_empty())
+		  {
+			  if (index + 4 == i) {
+				  fixed_reg = 1;
+				  if (MI->sgx_type == 1)
+					  new_MO.setReg(X86::GS);
+				  else if (MI->sgx_type == 2 || (MI->getFlags() & MachineInstr::FrameSetup) || (MI->getFlags() & MachineInstr::FrameDestroy))
+					  new_MO.setReg(X86::FS);
+				  else {
+					  errs() << "NO TYPE ON MI INSTRUCTIONS\n";
+					  MI->print(errs());
+					  assert(false && "No type on MI instruction with memory operand");
+				  }
+
 			  }
-
+			  else if ((index + 0 == i) || (index + 2 == i)) {
+				  fixed_seg = 1;
+				  unsigned reg = new_MO.getReg();
+				  if (reg != X86::NoRegister) {
+					  int size = TRI->getMinimalPhysRegClass(reg)->getSize();
+					  if (size == 8) {
+						  new_MO.setReg(TRI->getSubReg(reg, subregidx));
+					  }
+				  }
+			  }
 		  }
-		  else if ((index + 0 == i) || (index + 2 == i)) {
-			  fixed_seg = 1;
-			  unsigned reg = new_MO.getReg();
-			  if (reg != X86::NoRegister){
-				  int size = TRI->getMinimalPhysRegClass(reg)->getSize();
-			      if (size == 8) {
-				      new_MO.setReg(TRI->getSubReg(reg, subregidx));
-			      }
-			  }
-		  }	  
 	  }
+	  
 	  
 	
 	  
@@ -1452,22 +1485,34 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
 	}
 
 #endif
-	
-	if (MI->getOpcode() == X86::RETQ) {
-    OutStreamer->EmitRawText(
-      INS("movq\t(%rsp), %r10")
-    );
-    OutStreamer->EmitRawText(getNextReturnSiteMagic() + ":");
-    OutStreamer->EmitRawText(
-      INS("movabsq\t$0x6565656565656565, %r11")
-      INS("notq\t%r11")
-      INS("cmpq\t%r11, (%r10)")
-      INS("jne\t__shadow_stack_error1")
-			INS("popq\t%r11")
-      INS("addq\t$8, %r10")
-			INS("jmp\t*%r10")
-		);
-		return;
+	if (generateReturnChecks) {
+		if (MI->getOpcode() == X86::RETQ) {
+			OutStreamer->EmitRawText(
+				INS("movq\t(%rsp), %r10")
+			);
+
+			MDNode *md_ret = MF->getFunction()->getMetadata("sgx_return_type");
+			MDString *return_type_string = dyn_cast<MDString>(md_ret->getOperand(0).get());
+			assert(return_type_string);
+
+			int taint_flag = 0;
+			if (return_type_string->getString().str().compare("private") == 0)
+				OutStreamer->EmitRawText(getNextReturnSiteMagicPrivate() + ":");
+			else
+				OutStreamer->EmitRawText(getNextReturnSiteMagicPublic() + ":");
+
+			OutStreamer->EmitRawText(
+				INS("movabsq\t$0x6565656565656565, %r11")
+				INS("notq\t%r11")
+				INS("cmpq\t%r11, (%r10)")
+				INS("jne\t__shadow_stack_error1")
+				INS("popq\t%r11")
+				INS("addq\t$8, %r10")
+				INS("jmp\t*%r10")
+			);
+			return;
+		}
+
 	}
 	
 
@@ -1529,105 +1574,107 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
  
 
   const X86RegisterInfo *RI = MF->getSubtarget<X86Subtarget>().getRegisterInfo();
-  if (!MI->memoperands_empty() && !(MI->getFlags() & MachineInstr::FrameSetup | MI->getFlags() & MachineInstr::FrameDestroy)) {
-	  std::string sgx_type;
-	  unsigned bnd_reg;
-	  int address_offset = 0;
-	  int index = getMemLocation(MI);
-	  if (index == -1) {
-		  llvm_unreachable("Cant find position of mem operand!");
-	  }
 
-	  if (MI->sgx_type == 1) {
-		  sgx_type = "private";
-		  bnd_reg = X86::BND0;
-		  if (MI->getOperand(0 + index).getReg() == X86::RSP || MI->getOperand(0 + index).getReg() == X86::ESP || MI->getOperand(0 + index).getReg() == X86::EBP || MI->getOperand(0 + index).getReg() == X86::RBP) {
-			  address_offset = -SgxStackSize;
-		  }
-	  }
-	  else if (MI->sgx_type == 2) {
-		  sgx_type = "public";
-		  bnd_reg = X86::BND1;
-	  }
-	  else {
-		  MI->dump();
-		  llvm_unreachable("mem_operand with no type?");
-	  }
-
-	  if (MI->getOperand(0 + index).getReg() == X86::RSP && MI->getOperand(2 + index).getReg() == X86::NoRegister) {
-		  // No checks for constant stack accesses
-	  }
-	  else if (!NonMpxChecks) {
-		  MCInstBuilder MIB_L = MCInstBuilder(X86::BNDCL64rm).addReg(bnd_reg);
-		  MCInstBuilder MIB_U = MCInstBuilder(X86::BNDCU64rm).addReg(bnd_reg);
-
-		  MIB_L.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(0 + index)).getValue());
-		  MIB_U.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(0 + index)).getValue());
-
-		  MIB_L.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(1 + index)).getValue());
-		  MIB_U.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(1 + index)).getValue());
-
-		  MIB_L.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(2 + index)).getValue());
-		  MIB_U.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(2 + index)).getValue());
-
-		  if (MI->getOperand(3 + index).isImm()) {
-			  MIB_L.addImm(MI->getOperand(3 + index).getImm() + address_offset);
-			  MIB_U.addImm(MI->getOperand(3 + index).getImm() + address_offset);
-		  }
-		  else if (MI->getOperand(3 + index).isGlobal()) {
-			  MIB_L.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(3 + index)).getValue());
-			  MIB_U.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(3 + index)).getValue());
-		  }
-		  else if (MI->getOperand(3 + index).isCPI()) {
-			  MIB_L.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(3 + index)).getValue());
-			  MIB_U.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(3 + index)).getValue());
+  if (generateChecks) {
+	  if (!MI->memoperands_empty() && !(MI->getFlags() & MachineInstr::FrameSetup | MI->getFlags() & MachineInstr::FrameDestroy)) {
+		  std::string sgx_type;
+		  unsigned bnd_reg;
+		  int address_offset = 0;
+		  int index = getMemLocation(MI);
+		  if (index == -1) {
+			  llvm_unreachable("Cant find position of mem operand!");
 		  }
 
+		  if (MI->sgx_type == 1) {
+			  sgx_type = "private";
+			  bnd_reg = X86::BND0;
+			  if (MI->getOperand(0 + index).getReg() == X86::RSP || MI->getOperand(0 + index).getReg() == X86::ESP || MI->getOperand(0 + index).getReg() == X86::EBP || MI->getOperand(0 + index).getReg() == X86::RBP) {
+				  address_offset = -SgxStackSize;
+			  }
+		  }
+		  else if (MI->sgx_type == 2) {
+			  sgx_type = "public";
+			  bnd_reg = X86::BND1;
+		  }
 		  else {
 			  MI->dump();
-			  MI->getOperand(3 + index).print(llvm::errs());
-			  llvm_unreachable("Unknown type");
-		  }
-		  MIB_L.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(4 + index)).getValue());
-		  MIB_U.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(4 + index)).getValue());
-		  #ifdef GENERATE_CHECKS
-		    OutStreamer->EmitInstruction(MIB_L, getSubtargetInfo());
-		    OutStreamer->EmitInstruction(MIB_U, getSubtargetInfo());
-		  //OutStreamer->EmitRawText("bndcl\t%rsp, %bnd1");
-		  //OutStreamer->EmitRawText("bndcu\t%rsp, %bnd1");
-		  #endif
-	  }
-	  else {
-		  MCInstBuilder MIB = MCInstBuilder(X86::LEA64r).addReg(X86::R15);
-		  MIB.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(0 + index)).getValue());
-		  MIB.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(1 + index)).getValue());
-		  MIB.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(2 + index)).getValue());
-		  if (MI->getOperand(3 + index).isImm()) {
-			  int esp_offset = 0;
-			  //TO DO : Removed this. Check if anything breaks
-			  /* if (MI->getOperand(0 + index).getReg() == X86::ESP) {
-			  esp_offset = 4;
-			  }
-			  */
-			  MIB.addImm(MI->getOperand(3 + index).getImm() + address_offset + esp_offset);
-		  }
-		  else if (MI->getOperand(3 + index).isGlobal()) {
-			  MIB.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(3 + index)).getValue());
-		  }
-		  else {
-			  llvm_unreachable("Unknown type");
-		  }
-		  MIB.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(4 + index)).getValue());
-		  OutStreamer->EmitInstruction(MIB, getSubtargetInfo());
-		  int line_number = -1;
-		  if (MI->getDebugLoc().get() != NULL) {
-			  line_number = MI->getDebugLoc().getLine();
+			  llvm_unreachable("mem_operand with no type?");
 		  }
 
-		  OutStreamer->EmitRawText("\tsgx_" + sgx_type + "_check_macro $" + std::to_string(SgxDebugNumber) + ", $" + std::to_string(line_number));
-		  //  OutStreamer->EmitRawText("\tsgx_" + sgx_type + "_check_macro $" + std::to_string(SgxDebugNumber) + ", $" + std::to_string(0));
+		  if (MI->getOperand(0 + index).getReg() == X86::RSP && MI->getOperand(2 + index).getReg() == X86::NoRegister) {
+			  // No checks for constant stack accesses
+		  }
+		  else if (!NonMpxChecks) {
+			  MCInstBuilder MIB_L = MCInstBuilder(X86::BNDCL64rm).addReg(bnd_reg);
+			  MCInstBuilder MIB_U = MCInstBuilder(X86::BNDCU64rm).addReg(bnd_reg);
+
+			  MIB_L.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(0 + index)).getValue());
+			  MIB_U.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(0 + index)).getValue());
+
+			  MIB_L.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(1 + index)).getValue());
+			  MIB_U.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(1 + index)).getValue());
+
+			  MIB_L.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(2 + index)).getValue());
+			  MIB_U.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(2 + index)).getValue());
+
+			  if (MI->getOperand(3 + index).isImm()) {
+				  MIB_L.addImm(MI->getOperand(3 + index).getImm() + address_offset);
+				  MIB_U.addImm(MI->getOperand(3 + index).getImm() + address_offset);
+			  }
+			  else if (MI->getOperand(3 + index).isGlobal()) {
+				  MIB_L.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(3 + index)).getValue());
+				  MIB_U.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(3 + index)).getValue());
+			  }
+			  else if (MI->getOperand(3 + index).isCPI()) {
+				  MIB_L.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(3 + index)).getValue());
+				  MIB_U.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(3 + index)).getValue());
+			  }
+
+			  else {
+				  MI->dump();
+				  MI->getOperand(3 + index).print(llvm::errs());
+				  llvm_unreachable("Unknown type");
+			  }
+			  MIB_L.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(4 + index)).getValue());
+			  MIB_U.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(4 + index)).getValue());
+			  OutStreamer->EmitInstruction(MIB_L, getSubtargetInfo());
+			  OutStreamer->EmitInstruction(MIB_U, getSubtargetInfo());
+			  //OutStreamer->EmitRawText("bndcl\t%rsp, %bnd1");
+			  //OutStreamer->EmitRawText("bndcu\t%rsp, %bnd1");
+		  }
+		  else {
+			  MCInstBuilder MIB = MCInstBuilder(X86::LEA64r).addReg(X86::R15);
+			  MIB.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(0 + index)).getValue());
+			  MIB.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(1 + index)).getValue());
+			  MIB.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(2 + index)).getValue());
+			  if (MI->getOperand(3 + index).isImm()) {
+				  int esp_offset = 0;
+				  //TO DO : Removed this. Check if anything breaks
+				  /* if (MI->getOperand(0 + index).getReg() == X86::ESP) {
+				  esp_offset = 4;
+				  }
+				  */
+				  MIB.addImm(MI->getOperand(3 + index).getImm() + address_offset + esp_offset);
+			  }
+			  else if (MI->getOperand(3 + index).isGlobal()) {
+				  MIB.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(3 + index)).getValue());
+			  }
+			  else {
+				  llvm_unreachable("Unknown type");
+			  }
+			  MIB.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(4 + index)).getValue());
+			  OutStreamer->EmitInstruction(MIB, getSubtargetInfo());
+			  int line_number = -1;
+			  if (MI->getDebugLoc().get() != NULL) {
+				  line_number = MI->getDebugLoc().getLine();
+			  }
+
+			  OutStreamer->EmitRawText("\tsgx_" + sgx_type + "_check_macro $" + std::to_string(SgxDebugNumber) + ", $" + std::to_string(line_number));
+			  //  OutStreamer->EmitRawText("\tsgx_" + sgx_type + "_check_macro $" + std::to_string(SgxDebugNumber) + ", $" + std::to_string(0));
+		  }
 	  }
   }
+  
   if (MI->getOpcode() == X86::RETQ) {
 	  //OutStreamer->EmitRawText("\tshadow_stack_exit");
 	  /*
@@ -1818,77 +1865,44 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
 	  //OutStreamer->EmitRawText("\tpushq\t(%rsp)");
 	  //OutStreamer->EmitRawText("\tandq\t$-16, %rsp");
 	  
-	  
-	  if (MI->isIndirectCall) {
-		  OutStreamer->EmitRawText("\t# taint at this point = " + std::to_string(taint_flag));
-#ifdef GENERATE_CHECKS
-		  OutStreamer->EmitRawText("\t# taint at this point = " + std::to_string(taint_flag));
-		  //OutStreamer->EmitRawText("\tleaq\t0(%rip), %r11");
-		  if (MI->getOperand(0).getReg() != X86::RAX) {
-			  
-			  OutStreamer->EmitRawText(getNextCallMagic() + ":");
-			  OutStreamer->EmitRawText("\tmovabsq\t$0x6565656565656565, %rax");
-			  OutStreamer->EmitRawText("\tnotq\t%rax");
-			  MCInstBuilder MIB = MCInstBuilder(X86::CMP64mr).addReg(MI->getOperand(0).getReg()).addImm(0).addReg(X86::NoRegister).addImm(-16).addReg(X86::NoRegister).addReg(X86::RAX);
-			  OutStreamer->EmitInstruction(MIB, getSubtargetInfo());
-			  OutStreamer->EmitRawText("\tjne\t__function_call_error2");
-			  MCInstBuilder MIB2 = MCInstBuilder(X86::TEST8mi).addReg(MI->getOperand(0).getReg()).addImm(0).addReg(X86::NoRegister).addImm(-8).addReg(X86::NoRegister).addImm(taint_flag);
-			  OutStreamer->EmitInstruction(MIB2, getSubtargetInfo());
-			  OutStreamer->EmitRawText("\tjne\t__function_call_error2");
+	  if (generateIndirectCallChecks) {
+		  if (MI->isIndirectCall) {
+			  OutStreamer->EmitRawText("\t# taint at this point = " + std::to_string(taint_flag));
+
+			  OutStreamer->EmitRawText("\t# taint at this point = " + std::to_string(taint_flag));
+			  //OutStreamer->EmitRawText("\tleaq\t0(%rip), %r11");
+			  if (MI->getOperand(0).getReg() != X86::RAX) {
+
+				  OutStreamer->EmitRawText(getNextCallMagic() + ":");
+				  OutStreamer->EmitRawText("\tmovabsq\t$0x6565656565656565, %rax");
+				  OutStreamer->EmitRawText("\tnotq\t%rax");
+				  MCInstBuilder MIB = MCInstBuilder(X86::CMP64mr).addReg(MI->getOperand(0).getReg()).addImm(0).addReg(X86::NoRegister).addImm(-16).addReg(X86::NoRegister).addReg(X86::RAX);
+				  OutStreamer->EmitInstruction(MIB, getSubtargetInfo());
+				  OutStreamer->EmitRawText("\tjne\t__function_call_error2");
+				  MCInstBuilder MIB2 = MCInstBuilder(X86::TEST8mi).addReg(MI->getOperand(0).getReg()).addImm(0).addReg(X86::NoRegister).addImm(-8).addReg(X86::NoRegister).addImm(taint_flag);
+				  OutStreamer->EmitInstruction(MIB2, getSubtargetInfo());
+				  OutStreamer->EmitRawText("\tjne\t__function_call_error2");
+
+			  }
+			  else {
+				  OutStreamer->EmitRawText("\tpushq\t%rbx");
+				  OutStreamer->EmitRawText(getNextCallMagic() + ":");
+				  OutStreamer->EmitRawText("\tmovabsq\t$0x6565656565656565, %rbx");
+				  OutStreamer->EmitRawText("\tnotq\t%rbx");
+				  MCInstBuilder MIB = MCInstBuilder(X86::CMP64mr).addReg(MI->getOperand(0).getReg()).addImm(0).addReg(X86::NoRegister).addImm(-16).addReg(X86::NoRegister).addReg(X86::RBX);
+				  OutStreamer->EmitInstruction(MIB, getSubtargetInfo());
+				  OutStreamer->EmitRawText("\tjne\t__function_call_error2");
+				  MCInstBuilder MIB2 = MCInstBuilder(X86::TEST8mi).addReg(MI->getOperand(0).getReg()).addImm(0).addReg(X86::NoRegister).addImm(-8).addReg(X86::NoRegister).addImm(taint_flag);
+				  OutStreamer->EmitInstruction(MIB2, getSubtargetInfo());
+				  OutStreamer->EmitRawText("\tjne\t__function_call_error2");
+				  OutStreamer->EmitRawText("\tpopq\t%rbx");
+			  }
+
 			
 		  }
-		  else {
-			  OutStreamer->EmitRawText("\tpushq\t%rbx");
-			  OutStreamer->EmitRawText(getNextCallMagic() + ":");
-			  OutStreamer->EmitRawText("\tmovabsq\t$0x6565656565656565, %rbx");
-			  OutStreamer->EmitRawText("\tnotq\t%rbx");
-			  MCInstBuilder MIB = MCInstBuilder(X86::CMP64mr).addReg(MI->getOperand(0).getReg()).addImm(0).addReg(X86::NoRegister).addImm(-16).addReg(X86::NoRegister).addReg(X86::RBX);
-			  OutStreamer->EmitInstruction(MIB, getSubtargetInfo());
-			  OutStreamer->EmitRawText("\tjne\t__function_call_error2");
-			  MCInstBuilder MIB2 = MCInstBuilder(X86::TEST8mi).addReg(MI->getOperand(0).getReg()).addImm(0).addReg(X86::NoRegister).addImm(-8).addReg(X86::NoRegister).addImm(taint_flag);
-			  OutStreamer->EmitInstruction(MIB2, getSubtargetInfo());
-			  OutStreamer->EmitRawText("\tjne\t__function_call_error2");
-			  OutStreamer->EmitRawText("\tpopq\t%rbx");
-		  }
-#endif
-
-		  /*
-
-		  OutStreamer->EmitRawText("\tpushq\t%rax");
-		  
-		  assert(MI->call_arg_taint != -1);
-		  //MI->dump();
-		  if (MI->getOperand(0).getReg() != X86::RAX) {
-			  OutStreamer->EmitRawText(getNextCallMagic() + ":");
-			  OutStreamer->EmitRawText("\tmovabsq\t$"+std::to_string(~(0x9a9a9a9a9a9a9a00 + MI->call_arg_taint))+", %rax");
-			  OutStreamer->EmitRawText("\tnotq\t%rax");
-			  OutStreamer->EmitRawText("\tleaq\t0(%rip), %r11");
-			  MCInstBuilder MIB = MCInstBuilder(X86::CMP64mr).addReg(MI->getOperand(0).getReg()).addImm(0).addReg(X86::NoRegister).addImm(-8).addReg(X86::NoRegister).addReg(X86::RAX);
-			  OutStreamer->EmitInstruction(MIB, getSubtargetInfo());
-
-			  OutStreamer->EmitRawText("\tjne\t__function_call_error2");
-		  }
-		  else {
-			  OutStreamer->EmitRawText("\tpushq\t%rbx");
-			  OutStreamer->EmitRawText(getNextCallMagic() + ":");
-			  OutStreamer->EmitRawText("\tmovabsq\t$"+std::to_string(~(0x9a9a9a9a9a9a9a00 + MI->call_arg_taint))+", %rbx");
-			  OutStreamer->EmitRawText("\tnotq\t%rbx");
-			  OutStreamer->EmitRawText("\tleaq\t0(%rip), %r11");
-			  OutStreamer->EmitRawText("\tcmpq\t-8(%rax), %rbx");
-			  OutStreamer->EmitRawText("\tjne\t__function_call_error2");
-			  OutStreamer->EmitRawText("\tpopq\t%rbx");
-		  }
-		  OutStreamer->EmitRawText("\tpopq\t%rax");
-		  */
 	  }
-
   }
-/*  else {
-	  if (MI->isCall())
-		  llvm_unreachable("Invalid type of call!");
-  }
-
-  */
+	  
  
 
   switch (MI->getOpcode()) {
@@ -2356,12 +2370,18 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
     // Then emit the call
 	
 	OutStreamer->EmitInstruction(TmpInst, getSubtargetInfo());
+	
 	if (MI->isCall() && !(MI->getFlags() & MachineInstr::FrameSetup)) {
-		// This is for the great requirement our compilers have that the address should be 16 byte aligned which is quite frustrating.
-    OutStreamer->EmitRawText(getNextCallSiteMagic() + ":");
-    OutStreamer->EmitRawText(
-      INS(".space\t8, 0x9a")
-    );
+		if (generateReturnChecks) {
+			if (MI->register_sgx_type == 1)
+				OutStreamer->EmitRawText(getNextCallSiteMagicPrivate() + ":");
+			else
+				OutStreamer->EmitRawText(getNextCallSiteMagicPublic() + ":");
+			OutStreamer->EmitRawText(
+				INS(".space\t8, 0x9a")
+			);
+		}
+		
 #ifdef GEN_SHADOW
 
 #ifdef PROFILE_LOG
@@ -2439,51 +2459,53 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
 	  OutStreamer->EmitRawText("\t#frame setup completed, inserting checks");
 	  const MachineFunction* MF = MI->getParent()->getParent();
 
+	  if (generateChecks) {
+		  int max_frame_access = 0;
+		  int min_frame_access = 0;
+		  for (auto MBB = MF->begin(); MBB != MF->end(); MBB++) {
+			  for (auto MII = MBB->begin(); MII != MBB->end(); MII++) {
+				  if (!MII->memoperands_empty() && !(MII->getFlags() & MachineInstr::FrameSetup || MII->getFlags() & MachineInstr::FrameDestroy)) {
+					  int index = getMemLocation(MII.getInstrIterator().getNodePtrUnchecked());
+					  if (MII->getOperand(0 + index).getReg() == X86::RSP && MII->getOperand(2 + index).getReg() == X86::NoRegister) {
+						  int offset = MII->getOperand(3 + index).getImm();
+						  if (offset < min_frame_access)
+							  min_frame_access = offset;
+						  if (offset > max_frame_access)
+							  max_frame_access = offset;
 
-	  int max_frame_access = 0;
-	  int min_frame_access = 0;
-	  for (auto MBB = MF->begin(); MBB != MF->end(); MBB++) {
-		  for (auto MII = MBB->begin(); MII != MBB->end(); MII++){
-			  if (!MII->memoperands_empty() && !(MII->getFlags() & MachineInstr::FrameSetup || MII->getFlags() & MachineInstr::FrameDestroy)) {
-				  int index = getMemLocation(MII.getInstrIterator().getNodePtrUnchecked());
-				  if (MII->getOperand(0 + index).getReg() == X86::RSP && MII->getOperand(2 + index).getReg() == X86::NoRegister) {
-					  int offset = MII->getOperand(3 + index).getImm();
-					  if (offset < min_frame_access)
-						  min_frame_access = offset;
-					  if (offset > max_frame_access)
-						  max_frame_access = offset;
-
+					  }
 				  }
-			 }
+			  }
+		  }
+		  OutStreamer->EmitRawText("\t#max access=" + std::to_string(max_frame_access));
+		  OutStreamer->EmitRawText("\t#min access=" + std::to_string(min_frame_access));
+		  if (!NonMpxChecks) {
+			  OutStreamer->EmitRawText("\tbndcl\t" + std::to_string(min_frame_access) + "(%rsp), %bnd1");
+			  OutStreamer->EmitRawText("\tbndcu\t" + std::to_string(min_frame_access) + "(%rsp), %bnd1");
+			  OutStreamer->EmitRawText("\tbndcl\t" + std::to_string(max_frame_access) + "(%rsp), %bnd1");
+			  OutStreamer->EmitRawText("\tbndcu\t" + std::to_string(max_frame_access) + "(%rsp), %bnd1");
+		  }
+		  else {
+			  OutStreamer->EmitRawText("\tleaq\t" + std::to_string(min_frame_access) + "(%rsp), %r15");
+			  OutStreamer->EmitRawText("\tsgx_public_check_macro $" + std::to_string(SgxDebugNumber) + ", $" + std::to_string(0));
+			  OutStreamer->EmitRawText("\tleaq\t" + std::to_string(max_frame_access) + "(%rsp), %r15");
+			  OutStreamer->EmitRawText("\tsgx_public_check_macro $" + std::to_string(SgxDebugNumber) + ", $" + std::to_string(0));
 		  }
 	  }
-	  OutStreamer->EmitRawText("\t#max access=" + std::to_string(max_frame_access));
-	  OutStreamer->EmitRawText("\t#min access=" + std::to_string(min_frame_access));
-	  if (!NonMpxChecks) {
-#ifdef GENERATE_CHECKS
-		  OutStreamer->EmitRawText("\tbndcl\t" + std::to_string(min_frame_access) + "(%rsp), %bnd1");
-		  OutStreamer->EmitRawText("\tbndcu\t" + std::to_string(min_frame_access) + "(%rsp), %bnd1");
-		  OutStreamer->EmitRawText("\tbndcl\t" + std::to_string(max_frame_access) + "(%rsp), %bnd1");
-		  OutStreamer->EmitRawText("\tbndcu\t" + std::to_string(max_frame_access) + "(%rsp), %bnd1");
-#endif
-	  }
-	  else {
-		  OutStreamer->EmitRawText("\tleaq\t" + std::to_string(min_frame_access) + "(%rsp), %r15");
-		  OutStreamer->EmitRawText("\tsgx_public_check_macro $" + std::to_string(SgxDebugNumber) + ", $" + std::to_string(0));
-		  OutStreamer->EmitRawText("\tleaq\t" + std::to_string(max_frame_access) + "(%rsp), %r15");
-		  OutStreamer->EmitRawText("\tsgx_public_check_macro $" + std::to_string(SgxDebugNumber) + ", $" + std::to_string(0));
-	  }
+	  
 
   }
 //  unsigned int opcode = MI->getOpcode();
-  if ((opcode == X86::LEA64r || opcode == X86::LEA32r || opcode == X86::LEA16r || opcode == X86::LEA64_32r) && MI->sgx_type == 1) {
-	  bool rbp_stack = RI->getFrameLowering(*MI->getParent()->getParent())->hasFP(*MI->getParent()->getParent());
-	  if (MI->getOperand(1).getReg() == X86::RSP || (rbp_stack && MI->getOperand(1).getReg() == X86::RBP)) {
-		  std::string reg_name = std::string("%") + X86ATTInstPrinter::getRegisterName(MI->getOperand(0).getReg());
+  if (generateSegmentScheme) {
+	  if ((opcode == X86::LEA64r || opcode == X86::LEA32r || opcode == X86::LEA16r || opcode == X86::LEA64_32r) && MI->sgx_type == 1) {
+		  bool rbp_stack = RI->getFrameLowering(*MI->getParent()->getParent())->hasFP(*MI->getParent()->getParent());
+		  if (MI->getOperand(1).getReg() == X86::RSP || (rbp_stack && MI->getOperand(1).getReg() == X86::RBP)) {
+			  std::string reg_name = std::string("%") + X86ATTInstPrinter::getRegisterName(MI->getOperand(0).getReg());
 
-		  OutStreamer->EmitRawText("\trorq\t$32, " + reg_name);
-		  OutStreamer->EmitRawText("\tleaq\t0xA(" + reg_name + "), " + reg_name);
-		  OutStreamer->EmitRawText("\trorq\t$32, " + reg_name);
+			  OutStreamer->EmitRawText("\trorq\t$32, " + reg_name);
+			  OutStreamer->EmitRawText("\tleaq\t0xA(" + reg_name + "), " + reg_name);
+			  OutStreamer->EmitRawText("\trorq\t$32, " + reg_name);
+		  }
 	  }
   }
 

@@ -33,23 +33,36 @@ class LLVM_LIBRARY_VISIBILITY X86AsmPrinter : public AsmPrinter {
   
   std::vector<std::string> profiler_function_labels;
 
-  int sgx_callsite_magic_index;
-  int sgx_returnsite_magic_index;
+  int sgx_callsite_magic_index_public;
+  int sgx_returnsite_magic_index_public;
+  int sgx_callsite_magic_index_private;
+  int sgx_returnsite_magic_index_private;
+
   int sgx_function_magic_labels_index;
   int sgx_call_magic_labels_index;
   unsigned int shadow_stack_push_count;
 
   void sgxCallSiteMagicReset() {
-    sgx_callsite_magic_index = 0;
-    sgx_returnsite_magic_index = 0;
+    sgx_callsite_magic_index_public = 0;
+    sgx_returnsite_magic_index_public = 0;
+	sgx_callsite_magic_index_private = 0;
+	sgx_returnsite_magic_index_private = 0;
   }
-  std::string getNextCallSiteMagic() {
-    sgx_callsite_magic_index++;
-    return "__sgx_callsite_magic_" + std::to_string(sgx_callsite_magic_index - 1);
+  std::string getNextCallSiteMagicPublic() {
+    sgx_callsite_magic_index_public++;
+    return "__sgx_callsite_magic_public_" + std::to_string(sgx_callsite_magic_index_public - 1);
   }
-  std::string getNextReturnSiteMagic() {
-    sgx_returnsite_magic_index++;
-    return "__sgx_returnsite_magic_" + std::to_string(sgx_returnsite_magic_index - 1);
+  std::string getNextCallSiteMagicPrivate() {
+	  sgx_callsite_magic_index_private++;
+	  return "__sgx_callsite_magic_private_" + std::to_string(sgx_callsite_magic_index_private - 1);
+  }
+  std::string getNextReturnSiteMagicPublic() {
+    sgx_returnsite_magic_index_public++;
+    return "__sgx_returnsite_magic_public_" + std::to_string(sgx_returnsite_magic_index_public - 1);
+  }
+  std::string getNextReturnSiteMagicPrivate() {
+	  sgx_returnsite_magic_index_private++;
+	  return "__sgx_returnsite_magic_private_" + std::to_string(sgx_returnsite_magic_index_private - 1);
   }
 
   void sgxFunctionMagicReset() {
