@@ -121,7 +121,7 @@ namespace llvm {
 					}
 				}
 			}
-			if (MI->isCall()) {
+			if (MI->isCall() && !(MI->getFlags() & MachineInstr::FrameSetup)) {
 				// Kill the registers - rcx, rdx, r8, r9, r10, r11, xmm0, xmm1, xmm2, xmm3, xmm4, xmm5 (make private)
 				unsigned clear_set[] = { X86::RCX, X86::RDX, X86::R8, X86::R9/*, X86::R10, X86::R11, X86::XMM0, X86::XMM1, X86::XMM2, X86::XMM3, X86::XMM4, X86::XMM5 */};
 				for (int i = 0; i < sizeof(clear_set) / sizeof(clear_set[0]); i++) {

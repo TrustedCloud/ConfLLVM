@@ -477,9 +477,11 @@ namespace {
 						}
 					}
 					else if (CallInst *CI = dyn_cast<CallInst>(Ii)) {
+
 						std::string special_name = dyn_cast<CallInst>(Ii)->getCalledFunction()->getName().str();
 					//	errs() << "Special call : " << special_name << "\n";
 						if (strncmp(special_name.c_str(), "llvm.memcpy.", 12) == 0) {
+
 						//	errs() << "Inserting memcpy\n";
 							std::string arg1_name = opActual(CI->getOperand(0))->getName().str();
 							if (isa<GlobalObject>(opActual(I.getOperand(0)))) {
@@ -490,8 +492,10 @@ namespace {
 								arg2_name = "@" + arg2_name;
 							}
 							
-							if (arg1_name.compare("") && arg2_name.compare(""))
-								insert_implies(arg1_name, arg2_name, 0, 0, variables, variables_depth, func_solver);
+							if (arg1_name.compare("") && arg2_name.compare("")) {
+								insert_implies_only(arg2_name, arg1_name, 0, 0, variables, variables_depth, func_solver);
+								insert_implies_only(arg2_name, arg1_name, 1, 1, variables, variables_depth, func_solver);
+							}
 							else {
 								SKIP_DEBUG(errs() << "Skipping ";
 								opActual(BO->getOperand(0))->dump();)

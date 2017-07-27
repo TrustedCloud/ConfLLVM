@@ -465,6 +465,7 @@ void X86MCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {
 		  }	  
 	  }
 	  
+	
 	  
 	  
 	  
@@ -1329,8 +1330,22 @@ int getTaintFlag(const MachineInstr *MI, AsmPrinter *asm_printer) {
 
 	taint_flag *= 2;
 	taint = inferTaintForCodeGen(MI->getPrevNode(), X86::RDX, private_set);
-	if (taint == -1 || taint == 1)
+	if (taint == -1 || taint == 1) {
 		taint_flag += 1;
+		
+		/*errs() << "Returning PRIVATE for RDX at\n";
+		MI->dump();
+		if (MI->getPrevNode() == NULL)
+			errs() << "Prev is NULL\n";
+		else
+			MI->getPrevNode()->dump();
+		errs() << "PRIVATE SET\n";
+		for (auto reg : private_set) {
+			errs() << X86ATTInstPrinter::getRegisterName(reg) << ", ";
+		}
+		errs() << "\n";*/
+	}
+		
 
 	taint_flag *= 2;
 	taint = inferTaintForCodeGen(MI->getPrevNode(), X86::R8, private_set);
@@ -1493,8 +1508,8 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
 	  }
 	  
   }
-  */
   
+  */
   
   
 
@@ -1801,7 +1816,7 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
 	  
 	  
 	  if (MI->isIndirectCall) {
-		  
+		  OutStreamer->EmitRawText("\t# taint at this point = " + std::to_string(taint_flag));
 #ifdef GENERATE_CHECKS
 		  OutStreamer->EmitRawText("\t# taint at this point = " + std::to_string(taint_flag));
 		  //OutStreamer->EmitRawText("\tleaq\t0(%rip), %r11");
