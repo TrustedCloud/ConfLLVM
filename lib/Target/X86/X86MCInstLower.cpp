@@ -84,6 +84,10 @@ static cl::opt<bool> generateReturnChecks(
 	cl::desc("Enable checks before returning from calls for CFI"));
 
 
+static cl::opt<bool> invertSegmentNames(
+	"inver-segment-names", cl::init(false),
+	cl::desc("Flips the segments used for public and private section"));
+
 
 namespace {
 
@@ -473,10 +477,20 @@ void X86MCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {
 		  {
 			  if (index + 4 == i) {
 				  fixed_reg = 1;
-				  if (MI->sgx_type == 1)
-					  new_MO.setReg(X86::GS);
-				  else if (MI->sgx_type == 2 || (MI->getFlags() & MachineInstr::FrameSetup) || (MI->getFlags() & MachineInstr::FrameDestroy))
+				  if (MI->sgx_type == 1){
+					  if (!invertSegmentNames)
+						new_MO.setReg(X86::GS);
+					  else
+						new_MO.setReg(X86::FS);
+					
+				  }
+				  else if (MI->sgx_type == 2 || (MI->getFlags() & MachineInstr::FrameSetup) || (MI->getFlags() & MachineInstr::FrameDestroy)) {
+					if(!invertSegmentNames)
 					  new_MO.setReg(X86::FS);
+					else
+					  new_MO.setReg(X86::GS);
+
+				  }
 				  else {
 					  errs() << "NO TYPE ON MI INSTRUCTIONS\n";
 					  MI->print(errs());
