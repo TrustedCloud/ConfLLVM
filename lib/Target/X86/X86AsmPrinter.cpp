@@ -582,11 +582,11 @@ void PrintModuleMacros(llvm::MCStreamer *OutStreamer) {
 	OutStreamer->EmitRawText("\t.macro\tsgx_public_check_macro module_num, line_num");
 	OutStreamer->EmitRawText("\tpushf");
 	OutStreamer->EmitRawText("\tmovq\t%rax, %gs:0xf0");
-	sprintf(instruction, "\tmovabsq\t$0x%x, %rax", PrivateSegmentStart +  SegmentSize);
+	sprintf(instruction, "\tmovabsq\t$0x%llx, %%rax", PrivateSegmentStart +  SegmentSize);
 	OutStreamer->EmitRawText(instruction);
 	OutStreamer->EmitRawText("\tcmp\t%rax, %r15");
 	OutStreamer->EmitRawText("\tjb\t_violation2");
-	sprintf(instruction, "\tmovabsq\t$0x%x, %rax", PrivateSegmentStart + 2 * SegmentSize);
+	sprintf(instruction, "\tmovabsq\t$0x%llx, %%rax", PrivateSegmentStart + 2 * SegmentSize);
 	OutStreamer->EmitRawText(instruction);
 	OutStreamer->EmitRawText("\tcmp\t%r15, %rax");
 	OutStreamer->EmitRawText("\tjbe\t_violation2");
@@ -597,11 +597,11 @@ void PrintModuleMacros(llvm::MCStreamer *OutStreamer) {
 	OutStreamer->EmitRawText("\t.macro\tsgx_private_check_macro module_num, line_num");
 	OutStreamer->EmitRawText("\tpushf");
 	OutStreamer->EmitRawText("\tmovq\t%rax, %gs:0xf0");
-	sprintf(instruction, "\tmovabsq\t$0x%x, %rax", PrivateSegmentStart);
+  sprintf(instruction, "\tmovabsq\t$0x%llx, %%rax", PrivateSegmentStart);
 	OutStreamer->EmitRawText(instruction);
 	OutStreamer->EmitRawText("\tcmp\t%rax, %r15");
 	OutStreamer->EmitRawText("\tjb\t_violation1");
-	sprintf(instruction, "\tmovabsq\t$0x%x, %rax", PrivateSegmentStart + SegmentSize);
+	sprintf(instruction, "\tmovabsq\t$0x%llx, %%rax", PrivateSegmentStart + SegmentSize);
 	OutStreamer->EmitRawText(instruction);
 	OutStreamer->EmitRawText("\tcmp\t%r15, %rax");
 	OutStreamer->EmitRawText("\tjbe\t_violation1");
