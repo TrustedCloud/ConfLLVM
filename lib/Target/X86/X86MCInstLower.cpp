@@ -85,7 +85,7 @@ static cl::opt<bool> generateReturnChecks(
 
 
 static cl::opt<bool> invertSegmentNames(
-	"inver-segment-names", cl::init(false),
+	"invert-segment-names", cl::init(false),
 	cl::desc("Flips the segments used for public and private section"));
 
 

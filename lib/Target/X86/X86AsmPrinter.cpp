@@ -44,6 +44,11 @@ using namespace llvm;
 // Primitive Helper Functions.
 //===----------------------------------------------------------------------===//
 
+cl::opt<unsigned long long> PrivateSegmentStart("private-segment-start", cl::desc("Start of private segment (Used for non mpx checks only)"), cl::value_desc("stack size"), cl::init(0x800000000));
+cl::opt<unsigned long long> SegmentSize("segment-size", cl::desc("Size of private and public segment (Used for non mpx checks only)"), cl::value_desc("stack size"), cl::init(0x10000000));
+
+
+
 /// runOnMachineFunction - Emit the function body.
 ///
 bool X86AsmPrinter::runOnMachineFunction(MachineFunction &MF) {
@@ -533,6 +538,7 @@ void PrintModuleMacros(llvm::MCStreamer *OutStreamer) {
 	OutStreamer->EmitRawText("\t.endm");
 
 
+/*
 	OutStreamer->EmitRawText("\t.macro\tsgx_public_check_macro module_num, line_num");
 	OutStreamer->EmitRawText("\tpushf");
 	OutStreamer->EmitRawText("\tmovq\t%rax, %gs:0xf0");
@@ -568,7 +574,44 @@ void PrintModuleMacros(llvm::MCStreamer *OutStreamer) {
 	OutStreamer->EmitRawText("\tmovq\t%gs:0xf0, %rax");
 	OutStreamer->EmitRawText("\tpopf");
 	OutStreamer->EmitRawText("\t.endm");
+*/
 
+	char instruction[100];
+
+
+	OutStreamer->EmitRawText("\t.macro\tsgx_public_check_macro module_num, line_num");
+	OutStreamer->EmitRawText("\tpushf");
+	OutStreamer->EmitRawText("\tmovq\t%rax, %gs:0xf0");
+	sprintf(instruction, "\tmovabsq\t$0x%x, %rax", PrivateSegmentStart +  SegmentSize);
+	OutStreamer->EmitRawText(instruction);
+	OutStreamer->EmitRawText("\tcmp\t%rax, %r15");
+	OutStreamer->EmitRawText("\tjb\t_violation2");
+	sprintf(instruction, "\tmovabsq\t$0x%x, %rax", PrivateSegmentStart + 2 * SegmentSize);
+	OutStreamer->EmitRawText(instruction);
+	OutStreamer->EmitRawText("\tcmp\t%r15, %rax");
+	OutStreamer->EmitRawText("\tjbe\t_violation2");
+	OutStreamer->EmitRawText("\tmovq\t%gs:0xf0, %rax");
+	OutStreamer->EmitRawText("\tpopf");
+	OutStreamer->EmitRawText("\t.endm");
+
+	OutStreamer->EmitRawText("\t.macro\tsgx_private_check_macro module_num, line_num");
+	OutStreamer->EmitRawText("\tpushf");
+	OutStreamer->EmitRawText("\tmovq\t%rax, %gs:0xf0");
+	sprintf(instruction, "\tmovabsq\t$0x%x, %rax", PrivateSegmentStart);
+	OutStreamer->EmitRawText(instruction);
+	OutStreamer->EmitRawText("\tcmp\t%rax, %r15");
+	OutStreamer->EmitRawText("\tjb\t_violation1");
+	sprintf(instruction, "\tmovabsq\t$0x%x, %rax", PrivateSegmentStart + SegmentSize);
+	OutStreamer->EmitRawText(instruction);
+	OutStreamer->EmitRawText("\tcmp\t%r15, %rax");
+	OutStreamer->EmitRawText("\tjbe\t_violation1");
+	OutStreamer->EmitRawText("\tmovq\t%gs:0xf0, %rax");
+	OutStreamer->EmitRawText("\tpopf");
+	OutStreamer->EmitRawText("\t.endm");
+
+
+
+	
 
 	// Macro shadow_stack_enter for shadow stack implementation that does not switch the stack but only saves the return address on a separate stack
 	OutStreamer->EmitRawText(
