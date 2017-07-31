@@ -595,9 +595,10 @@ void PrintModuleMacros(llvm::MCStreamer *OutStreamer) {
 	OutStreamer->EmitRawText("\t.endm");
 
 	OutStreamer->EmitRawText("\t.macro\tsgx_private_check_macro module_num, line_num");
+
 	OutStreamer->EmitRawText("\tpushf");
 	OutStreamer->EmitRawText("\tmovq\t%rax, %gs:0xf0");
-  sprintf(instruction, "\tmovabsq\t$0x%llx, %%rax", PrivateSegmentStart);
+  sprintf(instruction, "\tmovabsq\t$0x%llx, %%rax", PrivateSegmentStart + 0);
 	OutStreamer->EmitRawText(instruction);
 	OutStreamer->EmitRawText("\tcmp\t%rax, %r15");
 	OutStreamer->EmitRawText("\tjb\t_violation1");
