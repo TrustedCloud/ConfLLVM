@@ -579,7 +579,7 @@ void PrintModuleMacros(llvm::MCStreamer *OutStreamer) {
 	char instruction[100];
 
 
-	OutStreamer->EmitRawText("\t.macro\tsgx_public_check_macro module_num, line_num");
+	OutStreamer->EmitRawText("\t.macro\tsgx_public_check_macro");
 	OutStreamer->EmitRawText("\tpushf");
 	OutStreamer->EmitRawText("\tmovq\t%rax, %gs:0xf0");
 	sprintf(instruction, "\tmovabsq\t$0x%llx, %%rax", PrivateSegmentStart +  SegmentSize);
@@ -594,7 +594,7 @@ void PrintModuleMacros(llvm::MCStreamer *OutStreamer) {
 	OutStreamer->EmitRawText("\tpopf");
 	OutStreamer->EmitRawText("\t.endm");
 
-	OutStreamer->EmitRawText("\t.macro\tsgx_private_check_macro module_num, line_num");
+	OutStreamer->EmitRawText("\t.macro\tsgx_private_check_macro");
 
 	OutStreamer->EmitRawText("\tpushf");
 	OutStreamer->EmitRawText("\tmovq\t%rax, %gs:0xf0");
