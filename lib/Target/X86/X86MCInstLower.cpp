@@ -1601,14 +1601,14 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
 
 		  if (MI->sgx_type == 1) {
 			  sgx_type = "private";
-			  bnd_reg = X86::BND0;
+			  bnd_reg = (!invertSegmentNames) ? X86::BND0 : X86::BND1;
 			  if (MI->getOperand(0 + index).getReg() == X86::RSP || MI->getOperand(0 + index).getReg() == X86::ESP || MI->getOperand(0 + index).getReg() == X86::EBP || MI->getOperand(0 + index).getReg() == X86::RBP) {
 				  address_offset = -SgxStackSize;
 			  }
 		  }
 		  else if (MI->sgx_type == 2) {
 			  sgx_type = "public";
-			  bnd_reg = X86::BND1;
+			  bnd_reg = (invertSegmentNames) ? X86::BND0 : X86::BND1;
 		  }
 		  else {
 			  MI->dump();
@@ -2493,11 +2493,12 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
 		  }
 		  OutStreamer->EmitRawText("\t#max access=" + std::to_string(max_frame_access));
 		  OutStreamer->EmitRawText("\t#min access=" + std::to_string(min_frame_access));
+		  std::string str = (!invertSegmentNames) ? "1" : "0";
 		  if (!NonMpxChecks) {
-			  OutStreamer->EmitRawText("\tbndcl\t" + std::to_string(min_frame_access) + "(%rsp), %bnd1");
-			  OutStreamer->EmitRawText("\tbndcu\t" + std::to_string(min_frame_access) + "(%rsp), %bnd1");
-			  OutStreamer->EmitRawText("\tbndcl\t" + std::to_string(max_frame_access) + "(%rsp), %bnd1");
-			  OutStreamer->EmitRawText("\tbndcu\t" + std::to_string(max_frame_access) + "(%rsp), %bnd1");
+			  OutStreamer->EmitRawText("\tbndcl\t" + std::to_string(min_frame_access) + "(%rsp), %bnd" + str);
+			  OutStreamer->EmitRawText("\tbndcu\t" + std::to_string(min_frame_access) + "(%rsp), %bnd" + str);
+			  OutStreamer->EmitRawText("\tbndcl\t" + std::to_string(max_frame_access) + "(%rsp), %bnd" + str);
+			  OutStreamer->EmitRawText("\tbndcu\t" + std::to_string(max_frame_access) + "(%rsp), %bnd" + str);
 		  }
 		  else {
 			  OutStreamer->EmitRawText("\tleaq\t" + std::to_string(min_frame_access) + "(%rsp), %r15");
