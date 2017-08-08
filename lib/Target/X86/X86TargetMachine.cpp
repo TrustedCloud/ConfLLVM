@@ -265,6 +265,7 @@ public:
   bool addPreISel() override;
   void addPreRegAlloc() override;
   void addSgxMCPassFinal() override;
+  void addSgxMCPassMPX() override;
   void addPostRegAlloc() override;
   void addPreEmitPass() override;
   void addPreSched2() override;
@@ -331,6 +332,11 @@ void X86PassConfig::addPreRegAlloc() {
 void X86PassConfig::addSgxMCPassFinal() {
 	addPass(createSgxMCPassFinal());
 }
+
+void X86PassConfig::addSgxMCPassMPX() {
+	addPass(createSgxMCPassMPX());
+}
+
 void X86PassConfig::addPostRegAlloc() {
   addPass(createX86FloatingPointStackifierPass());
 }

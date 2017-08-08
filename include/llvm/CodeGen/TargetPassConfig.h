@@ -346,6 +346,7 @@ protected:
 
 
   virtual void addSgxMCPassFinal() { }
+  virtual void addSgxMCPassMPX() { }
 
   /// Add passes that optimize machine instructions after register allocation.
   virtual void addMachineLateOptimization();

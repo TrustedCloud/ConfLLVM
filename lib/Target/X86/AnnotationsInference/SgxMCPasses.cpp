@@ -13,6 +13,36 @@
 using namespace llvm;
 
 namespace {
+	class SgxMCPassMPX : public MachineFunctionPass {
+	public:
+		static char ID;
+		SgxMCPassMPX() : MachineFunctionPass(ID) {}
+		/*bool runOnMachineFunction(MachineFunction &MF) {
+		return false;
+		}*/
+
+		void removeCall64m(MachineFunction &MF) {
+			const TargetInstrInfo *TII;
+			const X86Subtarget *STI;
+			STI = &MF.getSubtarget<X86Subtarget>();
+			TII = STI->getInstrInfo();
+			MachineRegisterInfo *MRI = &MF.getRegInfo();
+			for (MachineFunction::iterator BBi = MF.begin(); BBi != MF.end(); BBi++) {
+				outs() << "NAME: " << MF.getName() << "\n";
+				for (MachineBasicBlock::iterator MCi = BBi->begin(); MCi != BBi->end(); MCi++) {
+					MCi->print(outs());
+				}
+			}
+		}
+
+		bool runOnMachineFunction(MachineFunction &MF) {
+			removeCall64m(MF);
+			return true;
+		}
+	};
+	char SgxMCPassMPX::ID = 0;
+
+
 	class SgxMCPasses : public MachineFunctionPass {
 	public:
 		static char ID;
@@ -28,7 +58,9 @@ namespace {
 			TII = STI->getInstrInfo();
 			MachineRegisterInfo *MRI = &MF.getRegInfo();
 			for (MachineFunction::iterator BBi = MF.begin(); BBi != MF.end(); BBi++) {
+				//outs() << "NAME: " << MF.getName() << "\n";
 				for (MachineBasicBlock::iterator MCi = BBi->begin(); MCi != BBi->end(); MCi++) {
+					//MCi->print(outs());
 					if (MCi->getOpcode() == X86::CALL64m) {
 						//errs() << "Found a call to memory!\n";
 						unsigned Reg = MRI->createVirtualRegister(&X86::GR64RegClass);
@@ -98,7 +130,9 @@ namespace {
 			TII = STI->getInstrInfo();
 			const TargetRegisterInfo* TRI = STI->getRegisterInfo();
 			for (MachineFunction::iterator BBi = MF.begin(); BBi != MF.end(); BBi++) {
+				//outs() << "NAME1: " << MF.getName() << "\n";
 				for (MachineBasicBlock::iterator MCi = BBi->begin(); MCi != BBi->end(); MCi++) {
+					//MCi->print(outs());
 					if (MCi->getOpcode() == X86::IMPLICIT_DEF) {
 						unsigned Reg = MCi->getOperand(0).getReg();
 						int size = TRI->getMinimalPhysRegClass(Reg)->getSize();
@@ -133,4 +167,8 @@ FunctionPass *llvm::createSgxMCPass() {
 
 FunctionPass *llvm::createSgxMCPassFinal() {
 	return new SgxMCPassFinal();
+}
+
+FunctionPass *llvm::createSgxMCPassMPX() {
+	return new SgxMCPassMPX();
 }

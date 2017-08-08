@@ -1358,6 +1358,60 @@ static std::string getShuffleComment(const MachineOperand &DstOp,
 }
 
 
+static void GetMemOperands(const MachineInstr *MI, unsigned long &baseReg, unsigned long &indexReg)
+{
+
+	if (!MI->memoperands_empty() && 
+	    !((MI->getFlags() & MachineInstr::FrameSetup) || 
+	  	(MI->getFlags() & MachineInstr::FrameDestroy)))
+	{
+	    int index = getMemLocation(MI);
+	
+	    baseReg = MI->getOperand(index).getReg();
+	    indexReg = MI->getOperand(index+2).getReg();
+	}
+	else
+	{
+		baseReg = X86::NoRegister;
+		indexReg = X86::NoRegister;
+	}
+}
+
+static bool CheckForEarlierChecks(const MachineInstr *MI, 
+		                          unsigned long base, 
+								  unsigned long index, 
+								  const X86RegisterInfo *RI)
+{
+	bool found = false;
+	unsigned long baseReg, indexReg;
+
+	// FIXME: Need to check scale too. But hopefully there wouldn't be such cases.
+	for (auto Inst = MI->getParent()->begin(); Inst != MI; Inst++)
+	{
+		if (found == false)
+		{
+			GetMemOperands((const MachineInstr*)Inst, baseReg, indexReg);
+			if (baseReg == base && indexReg == index)
+			{
+				found = true;
+			}
+		}
+
+	    if (found)
+	    {
+	  	  	if (base != X86::NoRegister && Inst->definesRegister(base, RI))
+	  	  	{
+	  	  	    found = false;
+	  	  	}
+		  	if (index != X86::NoRegister && Inst->definesRegister(index, RI))
+		  	{
+	  	  	    found = false;
+		  	}
+	    }
+	}
+	return found;
+}
+
 
 
 
@@ -1598,17 +1652,18 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
 		  if (index == -1) {
 			  llvm_unreachable("Cant find position of mem operand!");
 		  }
+		  int hasIndex = MI->getOperand(2 + index).getReg() != X86::NoRegister;
 
 		  if (MI->sgx_type == 1) {
 			  sgx_type = "private";
-			  bnd_reg = X86::BND0;
+			  bnd_reg = (!invertSegmentNames) ? X86::BND0 : X86::BND1;
 			  if (MI->getOperand(0 + index).getReg() == X86::RSP || MI->getOperand(0 + index).getReg() == X86::ESP || MI->getOperand(0 + index).getReg() == X86::EBP || MI->getOperand(0 + index).getReg() == X86::RBP) {
 				  address_offset = -SgxStackSize;
 			  }
 		  }
 		  else if (MI->sgx_type == 2) {
 			  sgx_type = "public";
-			  bnd_reg = X86::BND1;
+			  bnd_reg = (invertSegmentNames) ? X86::BND0 : X86::BND1;
 		  }
 		  else {
 			  MI->dump();
@@ -1619,42 +1674,61 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
 			  // No checks for constant stack accesses
 		  }
 		  else if (!NonMpxChecks) {
-			  MCInstBuilder MIB_L = MCInstBuilder(X86::BNDCL64rm).addReg(bnd_reg);
-			  MCInstBuilder MIB_U = MCInstBuilder(X86::BNDCU64rm).addReg(bnd_reg);
+			  if (!CheckForEarlierChecks(MI, MI->getOperand(index).getReg(), MI->getOperand(index + 2).getReg(), RI))
+			  {
+				  if (!hasIndex)
+				  {
+					  MCInstBuilder MIB_L = MCInstBuilder(X86::BNDCL64rr).addReg(bnd_reg);
+					  MCInstBuilder MIB_U = MCInstBuilder(X86::BNDCU64rr).addReg(bnd_reg);
 
-			  MIB_L.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(0 + index)).getValue());
-			  MIB_U.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(0 + index)).getValue());
+					  MIB_L.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(index)).getValue());
+					  MIB_U.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(index)).getValue());
 
-			  MIB_L.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(1 + index)).getValue());
-			  MIB_U.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(1 + index)).getValue());
+					  OutStreamer->EmitInstruction(MIB_L, getSubtargetInfo());
+					  OutStreamer->EmitInstruction(MIB_U, getSubtargetInfo());
+					  //OutStreamer->EmitRawText("bndcl\t%rsp, %bnd1");
+					  //OutStreamer->EmitRawText("bndcu\t%rsp, %bnd1");
+				  }
+				  else
+				  {
+					  MCInstBuilder MIB_L = MCInstBuilder(X86::BNDCL64rm).addReg(bnd_reg);
+					  MCInstBuilder MIB_U = MCInstBuilder(X86::BNDCU64rm).addReg(bnd_reg);
 
-			  MIB_L.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(2 + index)).getValue());
-			  MIB_U.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(2 + index)).getValue());
+					  MIB_L.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(0 + index)).getValue());
+					  MIB_U.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(0 + index)).getValue());
 
-			  if (MI->getOperand(3 + index).isImm()) {
-				  MIB_L.addImm(MI->getOperand(3 + index).getImm() + address_offset);
-				  MIB_U.addImm(MI->getOperand(3 + index).getImm() + address_offset);
+					  MIB_L.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(1 + index)).getValue());
+					  MIB_U.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(1 + index)).getValue());
+
+					  MIB_L.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(2 + index)).getValue());
+					  MIB_U.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(2 + index)).getValue());
+
+					  if (MI->getOperand(3 + index).isImm()) {
+						  MIB_L.addImm(MI->getOperand(3 + index).getImm() + address_offset);
+						  MIB_U.addImm(MI->getOperand(3 + index).getImm() + address_offset);
+					  }
+					  else if (MI->getOperand(3 + index).isGlobal()) {
+						  MIB_L.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(3 + index)).getValue());
+						  MIB_U.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(3 + index)).getValue());
+					  }
+					  else if (MI->getOperand(3 + index).isCPI()) {
+						  MIB_L.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(3 + index)).getValue());
+						  MIB_U.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(3 + index)).getValue());
+					  }
+
+					  else {
+						  MI->dump();
+						  MI->getOperand(3 + index).print(llvm::errs());
+						  llvm_unreachable("Unknown type");
+					  }
+					  MIB_L.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(4 + index)).getValue());
+					  MIB_U.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(4 + index)).getValue());
+					  OutStreamer->EmitInstruction(MIB_L, getSubtargetInfo());
+					  OutStreamer->EmitInstruction(MIB_U, getSubtargetInfo());
+					  //OutStreamer->EmitRawText("bndcl\t%rsp, %bnd1");
+					  //OutStreamer->EmitRawText("bndcu\t%rsp, %bnd1");
+				  }
 			  }
-			  else if (MI->getOperand(3 + index).isGlobal()) {
-				  MIB_L.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(3 + index)).getValue());
-				  MIB_U.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(3 + index)).getValue());
-			  }
-			  else if (MI->getOperand(3 + index).isCPI()) {
-				  MIB_L.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(3 + index)).getValue());
-				  MIB_U.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(3 + index)).getValue());
-			  }
-
-			  else {
-				  MI->dump();
-				  MI->getOperand(3 + index).print(llvm::errs());
-				  llvm_unreachable("Unknown type");
-			  }
-			  MIB_L.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(4 + index)).getValue());
-			  MIB_U.addOperand(MCInstLowering.LowerMachineOperand(MI, MI->getOperand(4 + index)).getValue());
-			  OutStreamer->EmitInstruction(MIB_L, getSubtargetInfo());
-			  OutStreamer->EmitInstruction(MIB_U, getSubtargetInfo());
-			  //OutStreamer->EmitRawText("bndcl\t%rsp, %bnd1");
-			  //OutStreamer->EmitRawText("bndcu\t%rsp, %bnd1");
 		  }
 		  else {
 			  MCInstBuilder MIB = MCInstBuilder(X86::LEA64r).addReg(X86::R15);
@@ -2468,7 +2542,8 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
   }
 
 #endif
- 
+
+#if 0
   if ((MI->getOpcode() == X86::SUB64ri8 || MI->getOpcode() == X86::SUB64ri32 || (MI->getOpcode() == X86::SUB64rr && MI->getOperand(0).getReg()==X86::RSP)) && MI->getFlags() & MachineInstr::FrameSetup) {
 	  OutStreamer->EmitRawText("\t#frame setup completed, inserting checks");
 	  const MachineFunction* MF = MI->getParent()->getParent();
@@ -2491,13 +2566,14 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
 				  }
 			  }
 		  }
-		  OutStreamer->EmitRawText("\t#max access=" + std::to_string(max_frame_access));
-		  OutStreamer->EmitRawText("\t#min access=" + std::to_string(min_frame_access));
+		  //OutStreamer->EmitRawText("\t#max access=" + std::to_string(max_frame_access));
+		  //OutStreamer->EmitRawText("\t#min access=" + std::to_string(min_frame_access));
+		  //std::string str = (!invertSegmentNames) ? "1" : "0";
 		  if (!NonMpxChecks) {
-			  OutStreamer->EmitRawText("\tbndcl\t" + std::to_string(min_frame_access) + "(%rsp), %bnd1");
-			  OutStreamer->EmitRawText("\tbndcu\t" + std::to_string(min_frame_access) + "(%rsp), %bnd1");
-			  OutStreamer->EmitRawText("\tbndcl\t" + std::to_string(max_frame_access) + "(%rsp), %bnd1");
-			  OutStreamer->EmitRawText("\tbndcu\t" + std::to_string(max_frame_access) + "(%rsp), %bnd1");
+			  //OutStreamer->EmitRawText("\tbndcl\t" + std::to_string(min_frame_access) + "(%rsp), %bnd" + str);
+			  //OutStreamer->EmitRawText("\tbndcu\t" + std::to_string(min_frame_access) + "(%rsp), %bnd" + str);
+			  //OutStreamer->EmitRawText("\tbndcl\t" + std::to_string(max_frame_access) + "(%rsp), %bnd" + str);
+			  //OutStreamer->EmitRawText("\tbndcu\t" + std::to_string(max_frame_access) + "(%rsp), %bnd" + str);
 		  }
 		  else {
 			  OutStreamer->EmitRawText("\tleaq\t" + std::to_string(min_frame_access) + "(%rsp), %r15");
@@ -2506,9 +2582,9 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
 			  OutStreamer->EmitRawText("\tsgx_public_check_macro $" + std::to_string(SgxDebugNumber) + ", $" + std::to_string(0));
 		  }
 	  }
-	  
-
   }
+ #endif
+
 //  unsigned int opcode = MI->getOpcode();
   if (generateSegmentScheme) {
 	  if ((opcode == X86::LEA64r || opcode == X86::LEA32r || opcode == X86::LEA16r || opcode == X86::LEA64_32r) && MI->sgx_type == 1) {
