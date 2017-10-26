@@ -137,6 +137,17 @@ namespace {
 						unsigned Reg = MCi->getOperand(0).getReg();
 						int size = TRI->getMinimalPhysRegClass(Reg)->getSize();
 						
+						if (size == 16) {}
+						else if (size == 8)
+							MachineBasicBlock::iterator CLEAR = BuildMI(*BBi, MCi, MCi->getDebugLoc(), TII->get(X86::MOV64ri)).addReg(Reg, RegState::Define).addImm(0);
+						else if(size == 4)
+							MachineBasicBlock::iterator CLEAR = BuildMI(*BBi, MCi, MCi->getDebugLoc(), TII->get(X86::MOV32ri)).addReg(Reg, RegState::Define).addImm(0);
+						else if (size == 2)
+							MachineBasicBlock::iterator CLEAR = BuildMI(*BBi, MCi, MCi->getDebugLoc(), TII->get(X86::MOV16ri)).addReg(Reg, RegState::Define).addImm(0);
+						else
+							MachineBasicBlock::iterator CLEAR = BuildMI(*BBi, MCi, MCi->getDebugLoc(), TII->get(X86::MOV8ri)).addReg(Reg, RegState::Define).addImm(0);
+						
+						/*
 						if(size == 16)
 							MachineBasicBlock::iterator CLEAR = BuildMI(*BBi, MCi, MCi->getDebugLoc(), TII->get(X86::XORPSrr)).addReg(Reg, RegState::Define).addReg(Reg).addReg(Reg);
 						else if(size == 8)
@@ -147,6 +158,7 @@ namespace {
 							MachineBasicBlock::iterator CLEAR = BuildMI(*BBi, MCi, MCi->getDebugLoc(), TII->get(X86::XOR16rr)).addReg(Reg, RegState::Define).addReg(Reg).addReg(Reg);
 						else
 							MachineBasicBlock::iterator CLEAR = BuildMI(*BBi, MCi, MCi->getDebugLoc(), TII->get(X86::XOR8rr)).addReg(Reg, RegState::Define).addReg(Reg).addReg(Reg);
+							*/
 					}
 				}
 

@@ -46,7 +46,9 @@ using namespace llvm;
 
 cl::opt<unsigned long long> PrivateSegmentStart("private-segment-start", cl::desc("Start of private segment (Used for non mpx checks only)"), cl::value_desc("stack size"), cl::init(0x800000000));
 cl::opt<unsigned long long> SegmentSize("segment-size", cl::desc("Size of private and public segment (Used for non mpx checks only)"), cl::value_desc("stack size"), cl::init(0x10000000));
-
+static cl::opt<bool> SpitFunctionNames(
+	"spit-function-names", cl::init(false),
+	cl::desc("Spit Function names before functions in the binary"));
 
 
 /// runOnMachineFunction - Emit the function body.
@@ -899,9 +901,11 @@ int getRegisterTaintSignature(unsigned Reg, const llvm::MachineFunction *MF) {
 		
 }
 //#define PROFILE_LOG 1
+extern int int3_emmitted;
 void X86AsmPrinter::EmitFunctionEntryLabel() {
-
-	//OutStreamer->EmitRawText("\t.asciz\t\"" + MF->getName().str() + "\"");
+	int3_emmitted = 0;
+	if(SpitFunctionNames)
+		OutStreamer->EmitRawText("\t.asciz\t\"" + MF->getName().str() + "\"");
 	OutStreamer->EmitRawText("\t.p2align\t4, 0x90");
 	OutStreamer->EmitRawText(getNextFunctionMagic()+":");
 	

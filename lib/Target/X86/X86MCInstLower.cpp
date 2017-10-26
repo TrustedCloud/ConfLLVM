@@ -1464,6 +1464,9 @@ int padding_added = 0;
 int gs_loaded = 0;
 int total_ssp_increment = 0;
 int total_rsp_increment = 0;
+int int3_emmitted = 0;
+int total_int3 = 0;
+
 void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
 
 
@@ -1554,7 +1557,12 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
 
 #endif
 	if (generateReturnChecks) {
-		if (MI->getOpcode() == X86::RETQ) {
+		if (MI->getOpcode() == X86::RETQ || MI->getOpcode() == X86::TRAP) {
+			if (MI->getOpcode() == X86::TRAP)
+				OutStreamer->EmitRawText(INS("xorq\t%rax, %rax"));
+			else if (MI->getParent()->getParent()->getFunction()->getReturnType()->isVoidTy() || MI->getParent()->getParent()->getFunction()->getReturnType()->isFloatingPointTy())
+				OutStreamer->EmitRawText(INS("xorq\t%rax, %rax"));
+
 			OutStreamer->EmitRawText(
 				INS("movq\t(%rsp), %r10")
 			);
@@ -1573,16 +1581,33 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
 				INS("movabsq\t$0x6565656565656565, %r11")
 				INS("notq\t%r11")
 				INS("cmpq\t%r11, (%r10)")
-				INS("jne\t__shadow_stack_error1")
-				INS("popq\t%r11")
+			);
+			//OutStreamer->EmitRawText(INS("jne\t__shadow_stack_error1"));
+			//OutStreamer->EmitRawText("\tjne\t__" + MI->getParent()->getParent()->getName().str() + "__int3");
+			OutStreamer->EmitRawText("\tjne\t__int3_label_" + std::to_string(total_int3));
+			OutStreamer->EmitRawText(INS("popq\t%r11")
 				INS("addq\t$8, %r10")
 				INS("jmp\t*%r10")
 			);
-			return;
 		}
 
 	}
-	
+	else if (MI->getOpcode() == X86::RETQ || MI->getOpcode() == X86::TRAP) {
+		if (MI->getOpcode() == X86::TRAP)
+			OutStreamer->EmitRawText(INS("xorq\t%rax, %rax"));
+		OutStreamer->EmitRawText("retq");
+		
+	}
+
+	if (MI->getOpcode() == X86::RETQ || MI->getOpcode() == X86::TRAP) {
+		if(!int3_emmitted)
+			OutStreamer->EmitRawText("__" + MI->getParent()->getParent()->getName().str() + "__int3:");
+		OutStreamer->EmitRawText("__int3_label_" + std::to_string(total_int3)+":");
+		total_int3++;
+		OutStreamer->EmitRawText(INS("int $3"));
+		int3_emmitted = 1;
+		return;
+	}
 
   
   X86MCInstLower MCInstLowering(*MF, *this);
@@ -1876,7 +1901,8 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
   }
 
    
-	
+  if (MI->isCall() && MI->getFlags() & MachineInstr::FrameSetup)
+	  return;
   if (MI->isCall() && !(MI->getFlags() & MachineInstr::FrameSetup)) {
 	  //MI->dump();
 	  int taint_flag = getTaintFlag(MI, this);
@@ -1966,11 +1992,13 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
 				  OutStreamer->EmitRawText("\tnotq\t%rax");
 				  MCInstBuilder MIB = MCInstBuilder(X86::CMP64mr).addReg(MI->getOperand(0).getReg()).addImm(0).addReg(X86::NoRegister).addImm(-16).addReg(X86::NoRegister).addReg(X86::RAX);
 				  OutStreamer->EmitInstruction(MIB, getSubtargetInfo());
-				  OutStreamer->EmitRawText("\tjne\t__function_call_error2");
+				  //OutStreamer->EmitRawText("\tjne\t__function_call_error2");
+				  OutStreamer->EmitRawText("\tjne\t__"+MI->getParent()->getParent()->getName().str() + "__int3");
 				  MCInstBuilder MIB2 = MCInstBuilder(X86::TEST8mi).addReg(MI->getOperand(0).getReg()).addImm(0).addReg(X86::NoRegister).addImm(-8).addReg(X86::NoRegister).addImm(taint_flag);
 				  OutStreamer->EmitInstruction(MIB2, getSubtargetInfo());
-				  OutStreamer->EmitRawText("\tjne\t__function_call_error2");
-
+				  //OutStreamer->EmitRawText("\tjne\t__function_call_error2");
+				  OutStreamer->EmitRawText("\tjne\t__" + MI->getParent()->getParent()->getName().str() + "__int3");
+				  
 			  }
 			  else {
 				  OutStreamer->EmitRawText("\tpushq\t%rbx");
@@ -1979,10 +2007,12 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
 				  OutStreamer->EmitRawText("\tnotq\t%rbx");
 				  MCInstBuilder MIB = MCInstBuilder(X86::CMP64mr).addReg(MI->getOperand(0).getReg()).addImm(0).addReg(X86::NoRegister).addImm(-16).addReg(X86::NoRegister).addReg(X86::RBX);
 				  OutStreamer->EmitInstruction(MIB, getSubtargetInfo());
-				  OutStreamer->EmitRawText("\tjne\t__function_call_error2");
+				  //OutStreamer->EmitRawText("\tjne\t__function_call_error2");
+				  OutStreamer->EmitRawText("\tjne\t__" + MI->getParent()->getParent()->getName().str() + "__int3");
 				  MCInstBuilder MIB2 = MCInstBuilder(X86::TEST8mi).addReg(MI->getOperand(0).getReg()).addImm(0).addReg(X86::NoRegister).addImm(-8).addReg(X86::NoRegister).addImm(taint_flag);
 				  OutStreamer->EmitInstruction(MIB2, getSubtargetInfo());
-				  OutStreamer->EmitRawText("\tjne\t__function_call_error2");
+				  //OutStreamer->EmitRawText("\tjne\t__function_call_error2");
+				  OutStreamer->EmitRawText("\tjne\t__" + MI->getParent()->getParent()->getName().str() + "__int3");
 				  OutStreamer->EmitRawText("\tpopq\t%rbx");
 			  }
 
