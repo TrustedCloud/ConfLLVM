@@ -431,16 +431,23 @@ X86MCInstLower::LowerMachineOperand(const MachineInstr *MI,
 }
 
 void X86MCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {
-  OutMI.setOpcode(MI->getOpcode());
-  //MI->print(errs());
-  //if (MI->getOpcode() == X86::MOVAPSmr)
-  //	  MI->print(errs());
+	OutMI.setOpcode(MI->getOpcode());
+	//MI->print(errs());
+	//if (MI->getOpcode() == X86::MOVAPSmr)
+	//	  MI->print(errs());
 
 
-  int fixed_reg = 0;
-  int fixed_seg = 0;
-  int i = 0;
-  int index = getMemLocation(MI);
+	int fixed_reg = 0;
+	int fixed_seg = 0;
+	int i = 0;
+	int index = getMemLocation(MI);
+	unsigned opcode = MI->getOpcode();
+	if (MI->getOpcode() == X86::LEA64r || opcode == X86::LEA16r || opcode == X86::LEA32r || opcode == X86::LEA64_32r)
+		index = 1;
+  
+  
+
+
   const TargetRegisterInfo* TRI = MI->getParent()->getParent()->getSubtarget().getRegisterInfo();
   int subregidx = TRI->getSubRegIndex(X86::RAX, X86::EAX);
   for (const MachineOperand &MO : MI->operands()) {
