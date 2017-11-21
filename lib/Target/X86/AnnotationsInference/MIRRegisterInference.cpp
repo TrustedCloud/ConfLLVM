@@ -57,6 +57,20 @@ namespace llvm {
 			if (MI->uses().begin()->getReg() == (MI->uses().begin() + 1)->getReg())
 				return 2;
 		}
+
+		if (MI->getOpcode() == X86::SUB32rr || MI->getOpcode() == X86::SUB64rr ) {
+			if (MI->uses().begin()->getReg() == (MI->uses().begin() + 1)->getReg())
+				return 2;
+		}
+
+		if (MI->getOpcode() == X86::SBB32rr || MI->getOpcode() == X86::SBB64rr) {
+			if (MI->uses().begin()->getReg() == (MI->uses().begin() + 1)->getReg()) {
+				if (private_set.find(X86::EFLAGS) != private_set.end())
+					return 1;
+				else
+					return 2;
+			}
+		}
 		//MI->dump();
 		/*Special cases*/
 		
@@ -121,6 +135,8 @@ namespace llvm {
 					}
 				}
 			}
+
+
 			if (MI->isCall() && !(MI->getFlags() & MachineInstr::FrameSetup)) {
 				// Kill the registers - rcx, rdx, r8, r9, r10, r11, xmm0, xmm1, xmm2, xmm3, xmm4, xmm5 (make private)
 				unsigned clear_set[] = { X86::RCX, X86::RDX, X86::R8, X86::R9/*, X86::R10, X86::R11, X86::XMM0, X86::XMM1, X86::XMM2, X86::XMM3, X86::XMM4, X86::XMM5 */};
