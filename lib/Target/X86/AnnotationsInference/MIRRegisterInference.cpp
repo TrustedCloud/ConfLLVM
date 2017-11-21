@@ -93,7 +93,7 @@ namespace llvm {
 			for (auto OP = MI->operands_begin(); OP != MI->operands_end(); OP++) {
 				if (OP->isReg() && OP->isDef()) {
 					int Reg = OP->getReg();
-					if (Reg != X86::RSP && Reg != X86::EFLAGS && Reg != X86::NoRegister) {
+					if (Reg != X86::RSP /*&& Reg != X86::EFLAGS*/ && Reg != X86::NoRegister) {
 						isDef = true;
 						defRegs.push_back(Reg);
 					}
@@ -129,7 +129,12 @@ namespace llvm {
 						temp_set.insert(*alias);
 				}
 			}
-
+			if (MI->isConditionalBranch() && temp_set.find(X86::EFLAGS) != temp_set.end()) {
+				errs() << "ERROR: Branch on private flag at ";
+				MI->print(errs());
+				llvm_unreachable("ERROR: Branch on private flag!");
+				exit(-1);
+			}
 			if (OMI == MI.getInstrIterator().getNodePtrUnchecked()) {
 				if (temp_set.find(OReg) == temp_set.end()) {
 					return_taint = 2;
