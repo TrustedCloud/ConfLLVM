@@ -508,6 +508,9 @@ namespace {
 						//GI->dump();
 						//Type *ty = opActual(GI->getOperand(0))->getType();
 						Type *ty = GI->getOperand(0)->getType();
+
+						
+
 						std::string result = GI->getName().str();
 						std::string param = opActual(GI->getOperand(0))->getName();
 						if (dyn_cast<ConstantPointerNull>(opActual(GI->getOperand(0)))) {
@@ -517,9 +520,14 @@ namespace {
 							param = "@" + param;
 						}
 						
-						if (ty->getPointerElementType()->isStructTy()) {
-							if (dyn_cast<StructType>(ty->getPointerElementType())->isLiteral() && dyn_cast<ConstantExpr>(GI->getOperand(0)) && dyn_cast<ConstantExpr>(GI->getOperand(0))->isCast()) {
-								ty = dyn_cast<ConstantExpr>(GI->getOperand(0))->getType();
+						if (ty->getPointerElementType()->isStructTy()) {	
+							if (dyn_cast<StructType>(ty->getPointerElementType())->isLiteral()){
+								if (dyn_cast<ConstantExpr>(GI->getOperand(0)) && dyn_cast<ConstantExpr>(GI->getOperand(0))->isCast()) {
+									ty = dyn_cast<ConstantExpr>(GI->getOperand(0))->getType();
+								}
+								if(dyn_cast<BitCastInst>(GI->getOperand(0))){
+									ty = dyn_cast<BitCastInst>(GI->getOperand(0))->getOperand(0)->getType();
+								}
 							}
 						}
 
@@ -712,6 +720,7 @@ namespace {
 			
 			bool solved = func_solver.check();
 			if (solved == false) {
+				errs() << "No solution for annotations inference in function "<< F.getName().str() << "\n"; 
 				llvm_unreachable(("No solution for annotations inference in function "+F.getName().str()+". Check for invalid assignments!\n").c_str());
 				return false;
 			}
@@ -760,6 +769,7 @@ namespace {
 					I.setMetadata("sgx_type", md_node);
 				}
 			}
+			//errs() << "Completed inference\n";
 			static int printed = false;
 			if (printed)
 				return false;
@@ -800,7 +810,6 @@ namespace {
 				lf_file << "\t" << (func->isVarArg() ? 16 : args->getNumOperands()) << "\n";
 			}
 			lf_file.close();
-
 			return false;
 			
 		}

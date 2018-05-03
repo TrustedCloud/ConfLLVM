@@ -480,6 +480,12 @@ void MCObjectFileInfo::initELFMCObjectFileInfo(const Triple &T) {
   ReadOnlySection =
       Ctx->getELFSection(".rodata", ELF::SHT_PROGBITS, ELF::SHF_ALLOC);
 
+
+
+  GlobalsRelocatedPrivate = Ctx->getELFSection("sgxg_pri", ELF::SHT_PROGBITS, ELF::SHF_ALLOC | ELF::SHF_WRITE);
+  GlobalsRelocatedPublic = Ctx->getELFSection("sgxg_pub", ELF::SHT_PROGBITS, ELF::SHF_ALLOC | ELF::SHF_WRITE);
+
+
   TLSDataSection =
       Ctx->getELFSection(".tdata", ELF::SHT_PROGBITS,
                          ELF::SHF_ALLOC | ELF::SHF_TLS | ELF::SHF_WRITE);

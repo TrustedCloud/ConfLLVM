@@ -3389,20 +3389,28 @@ void SelectionDAGBuilder::visitGetElementPtr(const User &I) {
 bool getSgxType_recurse(const Value *PtrV, std::set<const Instruction*> analyzed);
 bool getSgxType(const Value *PtrV) {
 	//PtrV->dump();
+	//errs() << "Last type queried for ";
+	//PtrV->print(errs());
+	//errs() << "\n";
 	std::set<const Instruction*> analyzed;
 	return getSgxType_recurse(PtrV, analyzed);
 }
 
 bool getSgxType_recurse(const Value *PtrV, std::set<const Instruction*> analyzed) {
 	bool sgx_type;
-	if (const Instruction *PI = dyn_cast<Instruction>(PtrV)) {
 
+	//errs() << "Last recurse on ";
+	//PtrV->print(errs());
+	//errs() << "\n";
+	if (const Instruction *PI = dyn_cast<Instruction>(PtrV)) {
+		//errs() << "Is instruction\n";
 		if (analyzed.find(PI) != analyzed.end()) {
 			return false;
 		}
 		analyzed.insert(PI);
 		MDNode *ptr_md_node = PI->getMetadata("sgx_type");
 		if (ptr_md_node == NULL) {
+			//errs() << "MD is null\n";
 			if (const BitCastInst *BI = dyn_cast<BitCastInst>(PI)) {
 				return getSgxType_recurse(BI->getOperand(0), analyzed);
 			}
@@ -5917,7 +5925,9 @@ void SelectionDAGBuilder::LowerCallTo(ImmutableCallSite CS, SDValue Callee,
 
   const Function *CF = CS.getCalledFunction();
   int index = 0;
-  
+ 
+
+ 
   MDNode *func_md = CS.getInstruction()->getMetadata("sgx_call_type");
   MDNode *func_ret_md = CS.getInstruction()->getMetadata("sgx_call_return_type");
   if (func_md == NULL) {

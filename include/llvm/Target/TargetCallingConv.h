@@ -66,6 +66,7 @@ namespace ISD {
 
   public:
 	bool sgx_type;
+	Value* memcpy_real_source;
     ArgFlagsTy() : Flags(0), sgx_type(false) { }
 
     bool isZExt()      const { return Flags & ZExt; }

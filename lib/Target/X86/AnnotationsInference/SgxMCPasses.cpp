@@ -123,6 +123,41 @@ namespace {
 				}
 			}
 		}
+		void fixNoReturn(MachineFunction &MF) {
+			const TargetInstrInfo *TII;
+			const X86Subtarget *STI;
+			STI = &MF.getSubtarget<X86Subtarget>();
+			TII = STI->getInstrInfo();
+			MachineRegisterInfo *MRI = &MF.getRegInfo();
+
+			int returnEmitted = 0;
+			MachineFunction::iterator noSuccessorBlock;
+			int noSuccessorFound = 0;
+			for (MachineFunction::iterator BBi = MF.begin(); BBi != MF.end(); BBi++) {
+				if(BBi->succ_empty()){
+					noSuccessorBlock = BBi;
+					noSuccessorFound = 1;
+				}
+				for (MachineBasicBlock::iterator MCi = BBi->begin(); MCi != BBi->end(); MCi++) {
+					if (MCi->isReturn()) {
+						returnEmitted = 1;
+						break;
+					}
+				}
+			}
+			if(!returnEmitted) {
+				errs() << "No RETQ found in " << MF.getName().str() << "\n";
+				if (noSuccessorFound) {
+					MachineBasicBlock::iterator lastMI = noSuccessorBlock->begin();
+					BuildMI(*noSuccessorBlock, noSuccessorBlock->end(), (*lastMI).getDebugLoc(), TII->get(X86::RETQ));
+				} else {
+					errs() << "Function has no return but no block with empty successors\n";
+					errs() << MF.getName().str();
+					errs() << "\n";
+				}
+			}
+					
+		}
 		void fixIMPLICITDEF(MachineFunction &MF) {
 			const TargetInstrInfo *TII;
 			const X86Subtarget *STI;
@@ -168,6 +203,7 @@ namespace {
 			//fixXMMSave(MF);
 			//fixXMMRestore(MF);
 			fixIMPLICITDEF(MF);
+			fixNoReturn(MF);
 			return true;
 		}
 	};

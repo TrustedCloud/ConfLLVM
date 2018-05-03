@@ -1428,32 +1428,30 @@ int getTaintFlag(const MachineInstr *MI, AsmPrinter *asm_printer) {
 		taint_flag = 1;
 	int taint = 0;
 
+	//Changes to Linux System V ABI Calling convention
+	//Arguments passed in RDI, RSI, RDX, RCX, R8, R9 
 	//TODO ? Make sure this has nodes before it
 	//assert(MI->getPrevNode());
 	taint_flag *= 2;
 	register_set private_set = asm_printer->start_set[MI->getParent()];
-	taint = inferTaintForCodeGen(MI->getPrevNode(), X86::RCX, private_set);
+	taint = inferTaintForCodeGen(MI->getPrevNode(), X86::RDI, private_set);
 	if (taint == -1 || taint == 1)
 		taint_flag += 1;
 
 	taint_flag *= 2;
-	taint = inferTaintForCodeGen(MI->getPrevNode(), X86::RDX, private_set);
-	if (taint == -1 || taint == 1) {
+	taint = inferTaintForCodeGen(MI->getPrevNode(), X86::RSI, private_set);
+	if (taint == -1 || taint == 1) 
 		taint_flag += 1;
-		
-		/*errs() << "Returning PRIVATE for RDX at\n";
-		MI->dump();
-		if (MI->getPrevNode() == NULL)
-			errs() << "Prev is NULL\n";
-		else
-			MI->getPrevNode()->dump();
-		errs() << "PRIVATE SET\n";
-		for (auto reg : private_set) {
-			errs() << X86ATTInstPrinter::getRegisterName(reg) << ", ";
-		}
-		errs() << "\n";*/
-	}
-		
+
+	taint_flag *= 2;
+	taint = inferTaintForCodeGen(MI->getPrevNode(), X86::RDX, private_set);
+	if (taint == -1 || taint == 1)
+		taint_flag += 1;
+
+	taint_flag *= 2;
+	taint = inferTaintForCodeGen(MI->getPrevNode(), X86::RCX, private_set);
+	if (taint == -1 || taint == 1)
+		taint_flag += 1;
 
 	taint_flag *= 2;
 	taint = inferTaintForCodeGen(MI->getPrevNode(), X86::R8, private_set);
@@ -1464,6 +1462,7 @@ int getTaintFlag(const MachineInstr *MI, AsmPrinter *asm_printer) {
 	taint = inferTaintForCodeGen(MI->getPrevNode(), X86::R9, private_set);
 	if (taint == -1 || taint == 1)
 		taint_flag += 1;
+
 	return taint_flag;
 }
 #define INS(x) "\t" x "\n"
@@ -1475,7 +1474,6 @@ int int3_emmitted = 0;
 int total_int3 = 0;
 
 void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
-
 
 
 
@@ -1685,6 +1683,7 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
 			  llvm_unreachable("Cant find position of mem operand!");
 		  }
 		  int hasIndex = MI->getOperand(2 + index).getReg() != X86::NoRegister;
+		  int hasBase = MI->getOperand(0 + index).getReg() != X86::NoRegister;
 
 		  if (MI->sgx_type == 1) {
 			  sgx_type = "private";
@@ -1708,7 +1707,7 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
 		  else if (!NonMpxChecks) {
 			  if (!CheckForEarlierChecks(MI, MI->getOperand(index).getReg(), MI->getOperand(index + 2).getReg(), RI))
 			  {
-				  if (!hasIndex)
+				  if (!hasIndex && hasBase)
 				  {
 					  MCInstBuilder MIB_L = MCInstBuilder(X86::BNDCL64rr).addReg(bnd_reg);
 					  MCInstBuilder MIB_U = MCInstBuilder(X86::BNDCU64rr).addReg(bnd_reg);
@@ -1923,6 +1922,7 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
 		      for (MCRegAliasIterator alias(impreg.getReg(), TRI, true); alias.isValid(); ++alias)
 				  imp_uses.insert(*alias);
 	  }
+		// Changed for Linux System V ABI calling conventions. First 6 arguments passed in RDI, RSI, RDX, RCX, R8, R9
 	  if (taint_flag & 0b1 && imp_uses.find(X86::R9) == imp_uses.end()) {
 		  taint_flag = taint_flag ^ 0b1;
 		  OutStreamer->EmitRawText("\txorq\t%r9, %r9");
@@ -1931,13 +1931,21 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
 		  taint_flag = taint_flag ^ 0b10;
 		  OutStreamer->EmitRawText("\txorq\t%r8, %r8");
 	  }
-	  if (taint_flag & 0b100 && imp_uses.find(X86::RDX) == imp_uses.end()) {
+	  if (taint_flag & 0b100 && imp_uses.find(X86::RCX) == imp_uses.end()) {
 		  taint_flag = taint_flag ^ 0b100;
+		  OutStreamer->EmitRawText("\txorq\t%rcx, %rcx");
+	  }
+	  if (taint_flag & 0b1000 && imp_uses.find(X86::RDX) == imp_uses.end()) {
+		  taint_flag = taint_flag ^ 0b1000;
 		  OutStreamer->EmitRawText("\txorq\t%rdx, %rdx");
 	  }
-	  if (taint_flag & 0b1000 && imp_uses.find(X86::RCX) == imp_uses.end()) {
-		  taint_flag = taint_flag ^ 0b1000;
-		  OutStreamer->EmitRawText("\txorq\t%rcx, %rcx");
+	  if (taint_flag & 0b10000 && imp_uses.find(X86::RSI) == imp_uses.end()) {
+		  taint_flag = taint_flag ^ 0b10000;
+		  OutStreamer->EmitRawText("\txorq\t%rsi, %rsi");
+	  }
+	  if (taint_flag & 0b100000 && imp_uses.find(X86::RDI) == imp_uses.end()) {
+		  taint_flag = taint_flag ^ 0b100000;
+		  OutStreamer->EmitRawText("\txorq\t%rdi, %rdi");
 	  }
 #ifdef GEN_SHADOW
 	  if (MI->isIndirectCall && MI->getOperand(0).getReg() == X86::R11)

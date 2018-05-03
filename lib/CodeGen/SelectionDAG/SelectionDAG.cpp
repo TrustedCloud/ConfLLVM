@@ -4358,6 +4358,7 @@ static SDValue getMemcpyLoadsAndStores(SelectionDAG &DAG, const SDLoc &dl,
 //	  source_op->dump();
 //	  llvm_unreachable("No md for ^");
 // }
+
   if(getSgxType(source_op))
   //if(dyn_cast<MDString>(dyn_cast<Instruction>(source_op)->getMetadata("sgx_type")->getOperand(1).get())->getString().str().compare("private")==0)
 	MMOFlags |= MachineMemOperand::MOTargetFlag1;

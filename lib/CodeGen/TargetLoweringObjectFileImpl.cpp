@@ -226,8 +226,11 @@ MCSection *TargetLoweringObjectFileELF::getExplicitSectionGlobal(
 /// Return the section prefix name used by options FunctionsSections and
 /// DataSections.
 static StringRef getSectionPrefixForGlobal(SectionKind Kind) {
+
   if (Kind.isText())
     return ".text";
+
+return "";
   if (Kind.isReadOnly())
     return ".rodata";
   if (Kind.isBSS())
@@ -247,6 +250,11 @@ selectELFSectionForGlobal(MCContext &Ctx, const GlobalValue *GV,
                           SectionKind Kind, Mangler &Mang,
                           const TargetMachine &TM, bool EmitUniqueSection,
                           unsigned Flags, unsigned *NextUniqueID) {
+
+
+//GV->print(errs());
+
+//errs() << "\n";
   unsigned EntrySize = 0;
   if (Kind.isMergeableCString()) {
     if (Kind.isMergeable2ByteCString()) {
@@ -291,6 +299,7 @@ selectELFSectionForGlobal(MCContext &Ctx, const GlobalValue *GV,
     Name = ".rodata.cst";
     Name += utostr(EntrySize);
   } else {
+    // Removing this because Kind broken for Linux, Name not being used except to check for text. 
     Name = getSectionPrefixForGlobal(Kind);
   }
   // FIXME: Extend the section prefix to include hotness catagories such as .hot
@@ -305,6 +314,31 @@ selectELFSectionForGlobal(MCContext &Ctx, const GlobalValue *GV,
     UniqueID = *NextUniqueID;
     (*NextUniqueID)++;
   }
+
+
+  static MCSectionELF* GlobalsRelocatedPrivate = Ctx.getELFSection("sgxg_pri", ELF::SHT_PROGBITS, ELF::SHF_ALLOC | ELF::SHF_WRITE);
+  static MCSectionELF* GlobalsRelocatedPublic = Ctx.getELFSection("sgxg_pub", ELF::SHT_PROGBITS, ELF::SHF_ALLOC | ELF::SHF_WRITE);
+  const GlobalVariable *GVar = dyn_cast<GlobalVariable>(GV);
+
+	if(!Name.equals(".text") && !Kind.isText()){
+	  if(GVar) {
+		MDNode *md_node = GVar->getMetadata("sgx_type");
+		if(!md_node)
+			return GlobalsRelocatedPublic;
+		std::string type = dyn_cast<MDString>(md_node->getOperand(1).get())->getString();
+		if(type.compare("public")==0)
+			return GlobalsRelocatedPublic;
+		else
+			return GlobalsRelocatedPrivate;
+	  }else{
+		errs() << "Not a GVar still this is called, I dont know what to do. So I am just returning Public\n btw the object is";
+		GV->dump();
+		return GlobalsRelocatedPublic;
+
+	  }
+	}
+
+//TargetLoweringObjectFileELF * TLOF = dyn_cast<const TargetLoweringObjectFileELF>(Ctx.getObjectFileInfo());
   return Ctx.getELFSection(Name, getELFSectionType(Name, Kind), Flags,
                            EntrySize, Group, UniqueID);
 }

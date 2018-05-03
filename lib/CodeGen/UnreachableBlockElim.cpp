@@ -66,7 +66,19 @@ static bool eliminateUnreachableBlock(Function &F) {
   for (unsigned i = 0, e = DeadBlocks.size(); i != e; ++i) {
     DeadBlocks[i]->eraseFromParent();
   }
-
+  /*
+  int returnFound = 0;
+  for (Function::iterator BB = F.begin(), BBE = F.end(); BB != BBE; ++BB) {
+    for (BasicBlock::iterator I = BB->begin(), IE = BB->end(); I != IE; ++I) {
+      if(dyn_cast<ReturnInst>(I)) {
+        returnFound = 1;
+        break;
+      }
+    }
+    if (returnFound)
+      break;
+  }
+  */
   return !DeadBlocks.empty();
 }
 

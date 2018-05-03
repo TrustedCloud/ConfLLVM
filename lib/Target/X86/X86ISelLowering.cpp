@@ -2397,10 +2397,13 @@ static SDValue CreateCopyOfByValArgument(SDValue Src, SDValue Dst,
                                          SelectionDAG &DAG, const SDLoc &dl) {
   SDValue SizeNode = DAG.getConstant(Flags.getByValSize(), dl, MVT::i32);
 
+
+  
+
   return DAG.getMemcpy(Chain, dl, Dst, Src, SizeNode, Flags.getByValAlign(),
                        /*isVolatile*/false, /*AlwaysInline=*/true,
                        /*isTailCall*/false,
-                       MachinePointerInfo(), MachinePointerInfo());
+                       MachinePointerInfo(), MachinePointerInfo(Flags.memcpy_real_source));
 }
 
 /// Return true if the calling convention is one that we can guarantee TCO for.
@@ -2828,6 +2831,9 @@ SDValue X86TargetLowering::LowerFormalArguments(
                         LiveXMMRegs.end());
       MemOps.push_back(DAG.getNode(X86ISD::VASTART_SAVE_XMM_REGS, dl,
                                    MVT::Other, SaveXMMOps));
+      //SDValue Store = (DAG.getNode(X86ISD::VASTART_SAVE_XMM_REGS, dl, MVT::Other, SaveXMMOps));
+      //Store->setFlags(MachineInstr::FrameSetup);
+      //MemOps.push_back(Store);
     }
 
     if (!MemOps.empty())
@@ -3226,6 +3232,14 @@ X86TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
       if (!StackPtr.getNode())
         StackPtr = DAG.getCopyFromReg(Chain, dl, RegInfo->getStackRegister(),
                                       getPointerTy(DAG.getDataLayout()));
+
+      //errs() << "Copying a ByVal argument\n";
+      //CLI.CS->getInstruction()->print(errs());
+      //errs() << "\n"; 
+      //errs() << "For argument = \n";
+	//CLI.CS->getInstruction()->getOperand(i)->print(errs());
+      //errs() << "\n";
+	Flags.memcpy_real_source = CLI.CS->getInstruction()->getOperand(i); 
       MemOpChains.push_back(LowerMemOpCallTo(Chain, StackPtr, Arg,
                                              dl, DAG, VA, Flags));
     }
@@ -23358,7 +23372,8 @@ MachineBasicBlock *X86TargetLowering::EmitVAStartSaveXMMRegsWithCustomInserter(
         .addImm(/*Disp=*/Offset)
         .addReg(/*Segment=*/0)
         .addReg(MI.getOperand(i).getReg())
-        .addMemOperand(MMO);
+        .addMemOperand(MMO)
+	.setMIFlag(MachineInstr::FrameSetup);
   }
 
   MI.eraseFromParent(); // The pseudo instruction is gone now.

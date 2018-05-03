@@ -24,6 +24,7 @@
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstrBundle.h"
+#include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineJumpTableInfo.h"
 #include "llvm/CodeGen/MachineLoopInfo.h"
 #include "llvm/CodeGen/MachineModuleInfoImpls.h"
@@ -857,6 +858,7 @@ int getMemLocation(const MachineInstr *MI) {
 }
 
 void AsmPrinter::EmitFunctionBody() {
+
   EmitFunctionHeader();
 
   // Emit target-specific gunk before the function body.
@@ -871,18 +873,21 @@ void AsmPrinter::EmitFunctionBody() {
     EmitBasicBlockStart(MBB);
 	checked_offsets.clear();
 	closed_offset_pairs.clear();
+/*
 	for (auto &MI : MBB) {
 		if (!MI.memoperands_empty()) {
 			int mem_index = getMemLocation(&MI);
 			//TODO : compelete this
 		}
 	}
-
+*/
 
 
 
     for (auto &MI : MBB) {
-	  
+      
+      //if (MI.isReturn())
+       // returnEmitted = 1;
       // Print the assembly for the instruction.
       if (!MI.isPosition() && !MI.isImplicitDef() && !MI.isKill() &&
           !MI.isDebugValue()) {
@@ -949,10 +954,10 @@ void AsmPrinter::EmitFunctionBody() {
 
     EmitBasicBlockEnd(MBB);
   }
-
   // If the function is empty and the object file uses .subsections_via_symbols,
   // then we need to emit *something* to the function body to prevent the
   // labels from collapsing together.  Just emit a noop.
+
   if ((MAI->hasSubsectionsViaSymbols() && !HasAnyRealCode)) {
     MCInst Noop;
     MF->getSubtarget().getInstrInfo()->getNoopForMachoTarget(Noop);

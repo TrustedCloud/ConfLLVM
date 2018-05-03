@@ -919,11 +919,19 @@ void X86AsmPrinter::EmitFunctionEntryLabel() {
 	else
 		taint_flag = 0;
 
+	//Changes for Linux System V ABI Calling convetion. First 6 arguments passed in RDI, RSI, RDX, RCX, R8, R9 
+
 	taint_flag *= 2;
-	if (getRegisterTaintSignature(X86::RCX, MF) == 1)
+	if (getRegisterTaintSignature(X86::RDI, MF) == 1)
+		taint_flag += 1;
+	taint_flag *= 2;
+	if (getRegisterTaintSignature(X86::RSI, MF) == 1)
 		taint_flag += 1;
 	taint_flag *= 2;
 	if (getRegisterTaintSignature(X86::RDX, MF) == 1)
+		taint_flag += 1;
+	taint_flag *= 2;
+	if (getRegisterTaintSignature(X86::RCX, MF) == 1)
 		taint_flag += 1;
 	taint_flag *= 2;
 	if (getRegisterTaintSignature(X86::R8, MF) == 1)

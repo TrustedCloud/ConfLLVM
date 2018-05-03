@@ -19,6 +19,6 @@ add_llvm_library(LLVMAnnotationsInference
 	${LLVM_MAIN_INCLUDE_DIR}/../lib/Target/X86
 
 )
-target_link_libraries(LLVMAnnotationsInference ${Z3_LIB_PATH}/libz3.lib)
+target_link_libraries(LLVMAnnotationsInference ${Z3_LIB_PATH}/libz3.so)
 add_dependencies(LLVMAnnotationsInference intrinsics_gen)
 

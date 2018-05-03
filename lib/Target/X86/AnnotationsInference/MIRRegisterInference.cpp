@@ -123,7 +123,9 @@ namespace llvm {
 			}
 			if (MI->isCall() && !(MI->getFlags() & MachineInstr::FrameSetup)) {
 				// Kill the registers - rcx, rdx, r8, r9, r10, r11, xmm0, xmm1, xmm2, xmm3, xmm4, xmm5 (make private)
-				unsigned clear_set[] = { X86::RCX, X86::RDX, X86::R8, X86::R9/*, X86::R10, X86::R11, X86::XMM0, X86::XMM1, X86::XMM2, X86::XMM3, X86::XMM4, X86::XMM5 */};
+
+				// Changed got Linux System V ABI calling convention. 
+				unsigned clear_set[] = { X86::RDI, X86::RSI, X86::RDX, X86::RCX, X86::R8, X86::R9/*, X86::R10, X86::R11, X86::XMM0, X86::XMM1, X86::XMM2, X86::XMM3, X86::XMM4, X86::XMM5 */};
 				for (int i = 0; i < sizeof(clear_set) / sizeof(clear_set[0]); i++) {
 					for (MCRegAliasIterator alias(clear_set[i], TRI, true); alias.isValid(); ++alias)
 						temp_set.insert(*alias);
@@ -147,7 +149,7 @@ namespace llvm {
 		register_set_map start_set;
 		register_set_map end_set;
 		const MachineBasicBlock *entry_block = MF->begin().getNodePtrUnchecked();
-		unsigned arg_set[] = { X86::RCX, X86::RDX, X86::R8, X86::R9 };
+		unsigned arg_set[] = { X86::RDI, X86::RSI, X86::RDX, X86::RCX, X86::R8, X86::R9 };
 		for (int i = 0; i < sizeof(arg_set) / sizeof(arg_set[0]); i++) {
 			for (MCRegAliasIterator alias(arg_set[i], TRI, true); alias.isValid(); ++alias)
 				start_set[entry_block].insert(*alias);
