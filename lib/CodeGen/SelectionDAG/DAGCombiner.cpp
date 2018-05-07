@@ -1265,7 +1265,6 @@ void DAGCombiner::Run(CombineLevel AtLevel) {
     do {
       N = Worklist.pop_back_val();
     } while (!N);
-
     bool GoodWorklistEntry = WorklistMap.erase(N);
     (void)GoodWorklistEntry;
     assert(GoodWorklistEntry &&
@@ -1304,7 +1303,6 @@ void DAGCombiner::Run(CombineLevel AtLevel) {
         AddToWorklist(ChildN.getNode());
 	
     SDValue RV = combine(N);
-
     if (!RV.getNode())
       continue;
 
@@ -1451,7 +1449,6 @@ SDValue DAGCombiner::visit(SDNode *N) {
 
 SDValue DAGCombiner::combine(SDNode *N) {
   SDValue RV = visit(N);
-
   // If nothing happened, try a target-specific DAG combine.
   if (!RV.getNode()) {
     assert(N->getOpcode() != ISD::DELETED_NODE &&
@@ -1463,7 +1460,6 @@ SDValue DAGCombiner::combine(SDNode *N) {
       // Expose the DAG combiner to the target combiner impls.
       TargetLowering::DAGCombinerInfo
         DagCombineInfo(DAG, Level, false, this);
-
       RV = TLI.PerformDAGCombine(N, DagCombineInfo);
     }
   }

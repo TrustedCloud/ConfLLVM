@@ -386,7 +386,7 @@ void Value::replaceAllUsesWith(Value *New) {
   }
   else if (GlobalObject *GO = dyn_cast<GlobalObject>(this)) {
 	  if (GO->getMetadata("sgx_type")) {
-		  dyn_cast<Instruction>(New)->setMetadata("sgx_type", GO->getMetadata("sgx_type"));
+		  dyn_cast<GlobalObject>(New)->setMetadata("sgx_type", GO->getMetadata("sgx_type"));
 	  }
   }
 

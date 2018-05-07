@@ -214,8 +214,9 @@ bool DAGTypeLegalizer::run() {
     assert(N->getNodeId() == ReadyToProcess &&
            "Node should be ready if on worklist!");
 
-    if (IgnoreNodeResults(N))
+    if (IgnoreNodeResults(N)) {
       goto ScanOperands;
+    }
 
     // Scan the values produced by the node, checking to see if any result
     // types are illegal.
@@ -281,6 +282,7 @@ ScanOperands:
 
       EVT OpVT = N->getOperand(i).getValueType();
       switch (getTypeAction(OpVT)) {
+      
       case TargetLowering::TypeLegal:
         continue;
       // The following calls must either replace all of the node's results
@@ -321,7 +323,6 @@ ScanOperands:
       }
       break;
     }
-
     // The sub-method updated N in place.  Check to see if any operands are new,
     // and if so, mark them.  If the node needs revisiting, don't add all users
     // to the worklist etc.
@@ -334,7 +335,6 @@ ScanOperands:
       if (M == N)
         // The node didn't morph - nothing special to do, it will be revisited.
         continue;
-
       // The node morphed - this is equivalent to legalizing by replacing every
       // value of N with the corresponding value of M.  So do that now.
       assert(N->getNumValues() == M->getNumValues() &&
@@ -354,12 +354,10 @@ ScanOperands:
     }
     }
 NodeDone:
-
     // If we reach here, the node was processed, potentially creating new nodes.
     // Mark it as processed and add its users to the worklist as appropriate.
     assert(N->getNodeId() == ReadyToProcess && "Node ID recalculated?");
     N->setNodeId(Processed);
-
     for (SDNode::use_iterator UI = N->use_begin(), E = N->use_end();
          UI != E; ++UI) {
       SDNode *User = *UI;
@@ -529,8 +527,9 @@ SDNode *DAGTypeLegalizer::AnalyzeNewNode(SDNode *N) {
 
   // Calculate the NodeId.
   N->setNodeId(N->getNumOperands() - NumProcessed);
-  if (N->getNodeId() == ReadyToProcess)
+  if (N->getNodeId() == ReadyToProcess) {
     Worklist.push_back(N);
+  }
 
   return N;
 }

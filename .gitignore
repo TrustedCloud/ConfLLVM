@@ -69,4 +69,4 @@ bindings/go/llvm/workdir
 
 
 
-tools/sgxc-clang
+tools/ConfCLANG

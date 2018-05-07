@@ -359,7 +359,10 @@ namespace {
 						}
 					}
 					else if (dyn_cast<CallInst>(Ii)!=NULL && !isInSpecialHandleList(*Ii)) {
+						
 						CallInst *CI = dyn_cast<CallInst>(Ii);
+						if (CI->isInlineAsm())
+							continue;
 						Function *TF = CI->getCalledFunction();
 						//errs() << "Doing inference for call statement\n";
 						//CI->dump();
@@ -706,6 +709,55 @@ namespace {
 						else {
 							SKIP_DEBUG(errs() << "Skipping ";
 							false_value->dump();)
+						}
+					}
+					else if (AtomicRMWInst *AI = dyn_cast<AtomicRMWInst>(Ii)) {
+						std::string var_name = AI->getName().str();
+						std::string ptr_name = opActual(AI->getPointerOperand())->getName().str();
+						std::string val_name = opActual(AI->getValOperand())->getName().str();
+						
+						if(isa<GlobalObject>(opActual(AI->getPointerOperand()))) {
+							ptr_name = "@" + ptr_name;
+						}	
+						if(isa<GlobalObject>(opActual(AI->getValOperand()))) {
+							val_name = "@" + val_name;
+						}	
+						if (ptr_name.compare("") && val_name.compare("")) {
+							insert_implies(ptr_name, var_name, 1, 0, variables, variables_depth, func_solver);
+							insert_implies_only(ptr_name, var_name, 0, 0, variables, variables_depth, func_solver);
+							insert_implies_only(ptr_name, ptr_name, 0, 1, variables, variables_depth, func_solver);
+							insert_implies(val_name, ptr_name, 0, 1, variables, variables_depth, func_solver);
+						}else {
+							SKIP_DEBUG(errs() << "Skipping ";
+							opActual(I.getPointerOperand())->dump();)	
+						}
+					}
+					else if (AtomicCmpXchgInst *AI = dyn_cast<AtomicCmpXchgInst>(Ii)) {
+						std::string var_name = AI->getName().str();
+						std::string ptr_name = opActual(AI->getPointerOperand())->getName().str();
+						std::string val_name = opActual(AI->getNewValOperand())->getName().str();
+						std::string cmp_name = opActual(AI->getCompareOperand())->getName().str();
+
+						if(isa<GlobalObject>(opActual(AI->getPointerOperand()))) {
+							ptr_name = "@" + ptr_name;
+						}	
+						if(isa<GlobalObject>(opActual(AI->getNewValOperand()))) {
+							val_name = "@" + val_name;
+						}	
+						if(isa<GlobalObject>(opActual(AI->getCompareOperand()))) {
+							cmp_name = "@" + cmp_name;
+						}	
+						if (ptr_name.compare("") && val_name.compare("") && cmp_name.compare("")) {
+							insert_implies(ptr_name, var_name, 1, 0, variables, variables_depth, func_solver);
+
+							insert_implies_only(ptr_name, var_name, 0, 0, variables, variables_depth, func_solver);
+							insert_implies_only(ptr_name, ptr_name, 0, 1, variables, variables_depth, func_solver);
+
+							insert_implies(val_name, ptr_name, 0, 1, variables, variables_depth, func_solver);
+							insert_implies(cmp_name, ptr_name, 0, 1, variables, variables_depth, func_solver);
+						}else {
+							SKIP_DEBUG(errs() << "Skipping ";
+							opActual(I.getPointerOperand())->dump();)	
 						}
 					}
 					else {

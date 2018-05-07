@@ -980,6 +980,7 @@ void SelectionDAGBuilder::visit(const Instruction &I) {
 
   CurInst = &I;
 
+
   visit(I.getOpcode(), I);
 
   if (!isa<TerminatorInst>(&I) && !HasTailCall &&
@@ -3760,9 +3761,9 @@ void SelectionDAGBuilder::visitLoadFromSwiftError(const LoadInst &I) {
 
 
 void SelectionDAGBuilder::visitStore(const StoreInst &I) {
-  if (I.isAtomic())
+  if (I.isAtomic()) { 
     return visitAtomicStore(I);
-
+  }
   const Value *SrcV = I.getOperand(0);
   const Value *PtrV = I.getOperand(1);
 
@@ -3834,7 +3835,6 @@ void SelectionDAGBuilder::visitStore(const StoreInst &I) {
 	SDValue St = DAG.getStore(
         Root, dl, SDValue(Src.getNode(), Src.getResNo() + i), Add,
         MachinePointerInfo(PtrV, Offsets[i]), Alignment, MMOFlags, AAInfo);
-
     Chains[ChainI] = St;
   }
 
@@ -4075,6 +4075,11 @@ void SelectionDAGBuilder::visitAtomicCmpXchg(const AtomicCmpXchgInst &I) {
       getValue(I.getNewValOperand()), MachinePointerInfo(I.getPointerOperand()),
       /*Alignment=*/ 0, SuccessOrder, FailureOrder, Scope);
 
+  bool sgx_type = getSgxType(I.getPointerOperand());
+  if (sgx_type)
+  	L.getNode()->sgx_type = 1;
+  else
+	L.getNode()->sgx_type = 2;
   SDValue OutChain = L.getValue(2);
 
   setValue(&I, L);
@@ -4102,7 +4107,9 @@ void SelectionDAGBuilder::visitAtomicRMW(const AtomicRMWInst &I) {
   SynchronizationScope Scope = I.getSynchScope();
 
   SDValue InChain = getRoot();
+  bool sgx_type = getSgxType(I.getPointerOperand());
 
+ 
   SDValue L =
     DAG.getAtomic(NT, dl,
                   getValue(I.getValOperand()).getSimpleValueType(),
@@ -4111,6 +4118,11 @@ void SelectionDAGBuilder::visitAtomicRMW(const AtomicRMWInst &I) {
                   getValue(I.getValOperand()),
                   I.getPointerOperand(),
                   /* Alignment=*/ 0, Order, Scope);
+
+  if (sgx_type)
+  	L.getNode()->sgx_type = 1;
+  else
+	L.getNode()->sgx_type = 2;
 
   SDValue OutChain = L.getValue(1);
 

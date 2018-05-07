@@ -908,6 +908,7 @@ void SelectionDAGLegalize::LegalizeLoadOps(SDNode *Node) {
 
 /// Return a legal replacement for the given operation, with all legal operands.
 void SelectionDAGLegalize::LegalizeOp(SDNode *Node) {
+
   DEBUG(dbgs() << "\nLegalizing: "; Node->dump(&DAG));
 
   if (Node->getOpcode() == ISD::TargetConstant) // Allow illegal target nodes.
@@ -2845,7 +2846,7 @@ bool SelectionDAGLegalize::ExpandNode(SDNode *Node) {
         cast<AtomicSDNode>(Node)->getSuccessOrdering(),
         cast<AtomicSDNode>(Node)->getFailureOrdering(),
         cast<AtomicSDNode>(Node)->getSynchScope());
-
+    Res->sgx_type = Node->sgx_type;
     SDValue ExtRes = Res;
     SDValue LHS = Res;
     SDValue RHS = Node->getOperand(1);

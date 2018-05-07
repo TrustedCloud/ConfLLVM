@@ -21067,6 +21067,8 @@ static SDValue LowerCMP_SWAP(SDValue Op, const X86Subtarget &Subtarget,
   SDValue Result = DAG.getMemIntrinsicNode(X86ISD::LCMPXCHG_DAG, DL, Tys,
                                            Ops, T, MMO);
 
+  Result->sgx_type = Op->sgx_type;
+
   SDValue cpOut =
     DAG.getCopyFromReg(Result.getValue(0), DL, Reg, T, Result.getValue(1));
   SDValue EFLAGS = DAG.getCopyFromReg(cpOut.getValue(1), DL, X86::EFLAGS,
@@ -21517,10 +21519,12 @@ static SDValue lowerAtomicArithWithLOCK(SDValue N, SelectionDAG &DAG) {
   }
 
   MachineMemOperand *MMO = cast<MemSDNode>(N)->getMemOperand();
-  return DAG.getMemIntrinsicNode(
+  SDValue Res = DAG.getMemIntrinsicNode(
       NewOpc, SDLoc(N), DAG.getVTList(MVT::i32, MVT::Other),
       {N->getOperand(0), N->getOperand(1), N->getOperand(2)},
       /*MemVT=*/N->getSimpleValueType(0), MMO);
+  Res->sgx_type = N->sgx_type;
+  return Res;
 }
 
 /// Lower atomic_load_ops into LOCK-prefixed operations.

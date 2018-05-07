@@ -222,6 +222,7 @@ SDValue DAGTypeLegalizer::PromoteIntRes_AtomicCmpSwap(AtomicSDNode *N,
         N->getChain(), N->getBasePtr(), N->getOperand(2), N->getOperand(3),
         N->getMemOperand(), N->getSuccessOrdering(), N->getFailureOrdering(),
         N->getSynchScope());
+    Res.getNode()->sgx_type = N->sgx_type;
     ReplaceValueWith(SDValue(N, 0), Res.getValue(0));
     ReplaceValueWith(SDValue(N, 2), Res.getValue(2));
     return Res.getValue(1);
@@ -1348,7 +1349,7 @@ void DAGTypeLegalizer::ExpandIntegerResult(SDNode *N, unsigned ResNo) {
     ReplaceValueWith(SDValue(N, 1), Tmp.second);
     break;
   }
-  case ISD::ATOMIC_CMP_SWAP_WITH_SUCCESS: {
+  case ISD::ATOMIC_CMP_SWAP_WITH_SUCCESS: { 
     AtomicSDNode *AN = cast<AtomicSDNode>(N);
     SDVTList VTs = DAG.getVTList(N->getValueType(0), MVT::Other);
     SDValue Tmp = DAG.getAtomicCmpSwap(
