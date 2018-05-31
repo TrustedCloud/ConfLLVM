@@ -15,6 +15,10 @@ using namespace llvm;
 #define SKIP_DEBUG(x) 
 static cl::opt<std::string> lfFileName("lf-filename", cl::init(""));
 
+
+#define implies(a, b) ((a) == (b))
+
+
 namespace {
 	struct AnnotationsInference : public FunctionPass {
 		static char ID;
@@ -33,6 +37,7 @@ namespace {
 			}
 			//errs() << LHS << " " << RHS << "\n";
 			z3::expr condition = implies(variables.find(LHS_name)->second, variables.find(RHS_name)->second);
+   			
 			func_solver.add(condition);
 			//errs() << "Inserted condition : " << LHS_name << " => " << RHS_name << "\n";
 			LHS_depth++;
