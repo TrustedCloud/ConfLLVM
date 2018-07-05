@@ -843,11 +843,11 @@ namespace {
 				MDNode* ret_md = dyn_cast<MDNode>(md_entry->getOperand(2));
 				lf_file << dyn_cast<MDString>(ret_md->getOperand(0))->getString().str() << "\t";
 				lf_file << fname << "\t";
-				int num_args = ((args->getNumOperands()) < 4) ? args->getNumOperands() : 4;
-				
+				int num_args = ((args->getNumOperands()) < 6) ? args->getNumOperands() : 6;
+					
 				Function *func = dyn_cast<Function>(module->getNamedValue(fname));
 				if (func->isVarArg())
-					num_args = 4;
+					num_args = 6;
 				for (int j = 0; j < num_args; j++) {
 					if (j>=args->getNumOperands())
 						lf_file << "public";
